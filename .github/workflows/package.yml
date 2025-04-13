@@ -1,0 +1,89 @@
+name: Upload Release Artifacts
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+        
+      # get the YAWP version (e.g. 0.5.2-beta1) from the published tag, to identify the correct changelog file
+      # ${{github.ref_name}} is <mc-version>-<yawp-version>, e.g. 1.21.4-0.5.2-beta1
+      # In the future, it would be better just to grab the latest section from the changelog file,
+      # instead creating new files for each version
+      - id: get-rt-version
+        run: |
+          rtVersion=$(echo ${{github.ref_name}} | cut -d- -f2,3)
+          echo "::set-output name=rtVersion::$rtVersion"
+      - run: echo "${{steps.get-rt-version.outputs.rtVersion}}"
+        
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 21
+
+      - name: Get current time
+        uses: srfrnk/current-time@master
+        id: current-time
+        with:
+          format: YYYYMMDDHHmmss
+
+      - name: Setup ENV
+        run: echo "TAG=${{ github.ref_name }}" >> $GITHUB_ENV
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      - name: Build with Gradle
+        env:
+          BUILD_TIME: ${{ steps.current-time.outputs.formattedTime }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: ./gradlew assemble
+     
+      - name: Generate CHANGELOG.md
+        uses: orhun/git-cliff-action@v2
+        with:
+          config: cliff.toml
+          args: --verbose
+        env:
+          FINAL_VERSION: ${{steps.get-rt-version.outputs.rtVersion}}
+          OUTPUT: CHANGELOG.md
+
+      - name: Save Changelog in Variable
+        uses: Stanzilla/cat@2.0.2
+        id: readChanglog
+        with:
+          path: CHANGELOG.md
+      - name: Publish Fabric to GitHub Releases
+        uses: Kir-Antipov/mc-publish@v3.3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-draft: false
+          github-prerelease: false
+          name: ${{ github.ref_name }}
+          version: ${{ github.ref_name }}
+          changelog-file: CHANGELOG.md
+          files: |
+            build/libs/!(*-@(dev|sources|javadoc|slim)).jar
+            build/libs/*-@(sources|javadoc).jar
+
+      - name: Publish Fabric to Curseforge
+        uses: Kir-Antipov/mc-publish@v3.3
+        with:
+          curseforge-id: ${{ secrets.CURSEFORGE_PROJECT }}
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          name: ${{ github.ref_name }}
+          version: ${{ github.ref_name }}-fabric
+          changelog-file: CHANGELOG.md
+          files: |
+            build/libs/!(*-@(dev|sources|javadoc|slim)).jar
+            build/libs/*-@(sources|javadoc).jar
+          java: |
+            21
+

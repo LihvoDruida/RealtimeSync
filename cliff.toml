@@ -1,0 +1,72 @@
+# git-cliff ~ default configuration file
+# https://git-cliff.org/docs/configuration
+#
+# Lines starting with "#" are comments.
+# Configuration options are organized into tables and keys.
+# See documentation for more information on available options.
+
+[changelog]
+vers = "$FINAL_VERSION"
+header = """
+# Changelog\n
+All notable changes to this project will be documented in this file.\n
+"""
+body = """
+{% if version %}
+## [{{ version }}] - {{ timestamp | date(format="%Y-%m-%d") }}  
+{% else %}  
+## [{{ vers }}]  - {{ timestamp | date(format="%Y-%m-%d")}}  
+{% endif %}  
+
+{% for group, commits in commits | group_by(attribute="group") %}
+    {% if group != "📦 Other Changes" %}
+    ### {{ group | upper_first }}
+    {% for commit in commits %}
+        - {% if commit.breaking %}[**breaking**] {% endif %}{{ commit.message | upper_first }}  
+    {% endfor %}
+    {% endif %}
+{% endfor %}
+
+### 📦 Other Changes
+{% for group, commits in commits | group_by(attribute="group") %}
+    {% if group == "📦 Other Changes" %}
+    {% for commit in commits %}
+        - {% if commit.breaking %}[**breaking**] {% endif %}{{ commit.message | upper_first }}  
+    {% endfor %}
+    {% endif %}
+{% endfor %}
+"""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = false
+split_commits = false
+
+commit_preprocessors = [
+  # твій кастомний патерн сюди за потреби
+]
+
+commit_parsers = [
+  { message = "^feat",     group = "🦸‍♂️ New Features" },
+  { message = "^fix",      group = "⚔️ Bug Fixes" },
+  { message = "^doc",      group = "📜 Documentation", skip = true },
+  { message = "^perf",     group = "💨 Performance Tweaks" },
+  { message = "^refactor", group = "🛠️ Code Refinements", skip = true },
+  { message = "^test",     group = "🎮 Testing & Validation" },
+  { message = "^chore",    group = "🔧 Miscellaneous Tasks", skip = true },
+  { message = "^ci",       group = "🛡️ CI/Build", skip = true },
+  { message = "^build",    group = "🛠️ Build System", skip = true },
+  { body = ".*security",   group = "🕵️‍♂️ Security Fixes" },
+
+  # 🔽 Додано: Підтримка звичайних комітів
+  { message = ".*", group = "📦 Other Changes" }
+]
+
+protect_breaking_commits = false
+filter_commits = false
+tag_pattern = "[0-9]*"
+ignore_tags = "^*-alpha$"
+topo_order = false
+sort_commits = "oldest"
+limit_commits = 50

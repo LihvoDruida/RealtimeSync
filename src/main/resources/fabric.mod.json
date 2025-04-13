@@ -1,0 +1,36 @@
+{
+	"schemaVersion": 1,
+	"id": "realtime",
+	"version": "${version}",
+	"name": "RealTime",
+	"description": "Synchronize game-server time with real time",
+	"authors": [
+		"melles1991"
+	],
+	"contact": {
+		"homepage": "https://github.com/LihvoDruida/RealtimeSync",
+		"sources": "https://github.com/LihvoDruida/RealtimeSync"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/realtime/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+          "com.realtime.TimeControl"
+		]
+	},
+	"mixins": [
+		"realtime.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.14.0",
+		"minecraft": "1.21.x",
+		"cloth-config": ">=17.0.144"
+	},
+	"custom": {
+		"modmenu:api": true
+	},
+	"suggests": {
+		"another-mod": "*"
+	}
+}
