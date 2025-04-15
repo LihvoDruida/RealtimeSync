@@ -25,10 +25,7 @@
 	"depends": {
 		"fabricloader": ">=0.14.0",
 		"minecraft": "1.21.x",
-		"cloth-config": ">=17.0.144"
-	},
-	"custom": {
-		"modmenu:api": true
+		"cloth-config": ">=15.0.x"
 	},
 	"suggests": {
 		"another-mod": "*"
