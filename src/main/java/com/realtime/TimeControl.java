@@ -11,26 +11,14 @@ import net.minecraft.world.GameRules;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.time.LocalTime;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import me.shedaniel.autoconfig.AutoConfig;
-import me.shedaniel.autoconfig.serializer.Toml4jConfigSerializer;
-import net.fabricmc.api.ModInitializer;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.world.GameRules;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
-import java.time.LocalTime;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 
 public class TimeControl implements ModInitializer {
 	public static final Logger LOGGER = LogManager.getLogger("Realtime");
 	private int tickCounter = 0;
-	private long customTicks = 0L;
+	private double customTicks = 0.0;
 	public static RealtimeConfig CONFIG;
 
 	@Override
@@ -53,37 +41,41 @@ public class TimeControl implements ModInitializer {
 
 	public void SetTimeToRealtime(MinecraftServer server) {
 		tickCounter++;
-		if (tickCounter >= CONFIG.updateInterval) {
-			try {
-				ServerWorld world = server.getOverworld();
-				if (world != null) {
-					if (CONFIG.customDayLengthMinutes == 0) {
-						// Реальний час
-						LocalTime systemTime = LocalTime.now().plusHours(CONFIG.offsetHours);
-						long secondsFromSixAM = systemTime.getSecond() + systemTime.getMinute() * 60 + (systemTime.getHour() - 6) * 3600;
-						long ticks = (Math.round(secondsFromSixAM * 24000 / 86400.0) + 24000) % 24000;
-						world.setTimeOfDay(ticks);
-					} else if (CONFIG.customDayLengthMinutes > 0) {
-						// Якщо customDayLengthMinutes більше 0, використовуємо власний таймер доби
-						// 1 хвилина реального часу = 24,000 тік в грі
-						long totalDayTicks = 24000; // Тривалість доби в тиках
-						long ticksPerSecond = totalDayTicks / 60; // Скільки тік буде за 1 секунду (для 1 хвилини)
-
-						// Оновлюємо власний таймер часу, плавно перераховуючи тики
-						customTicks = (customTicks + ticksPerSecond) % totalDayTicks; // Поступове збільшення тика
-
-						// Перетворюємо на тики для світу
-						long worldTime = customTicks % totalDayTicks;
-
-						world.setTimeOfDay(worldTime); // Оновлюємо час світу
-					}
-				} else {
-					throw new Error("Failed to get overworld pointer");
-				}
-			} catch (Exception e) {
-				LOGGER.error("Failed to set time of day", e);
+		if (tickCounter < CONFIG.updateInterval) {
+			return;
+		}
+		try {
+			ServerWorld  world = server.getOverworld();
+			if (world == null) {
+				throw new Error("Failed to get overworld pointer");
 			}
+
+			if (CONFIG.customDayLengthMinutes == 0) {
+				ZoneId zoneId = ZoneId.systemDefault(); // Використовуйте часову зону сервера
+				ZonedDateTime systemTime = ZonedDateTime.now(zoneId).plusHours(CONFIG.offsetHours);
+				LocalDateTime localTime = systemTime.toLocalDateTime();
+
+				int effectiveHour = ((localTime.getHour() - 6 + 24) % 24);
+				long secondsFromSixAM = effectiveHour * 3600L
+						+ localTime.getMinute() * 60L
+						+ localTime.getSecond();
+				long ticks = (Math.round(secondsFromSixAM * 24000 / 86400.0) + 24000) % 24000;
+
+				world.setTimeOfDay(ticks);
+				LOGGER.debug("Real Time Mode - Real Time: {}, Game Ticks: {}", localTime, ticks);
+			} else {
+				double addition = (double) CONFIG.updateInterval * 24000 / (CONFIG.customDayLengthMinutes * 60 * 20);
+				customTicks = (customTicks + addition) % 24000.0;
+				long worldTime = (long) customTicks;
+
+				world.setTimeOfDay(worldTime);
+				LOGGER.debug("Custom Time Mode - Custom Ticks: {}, Game Ticks: {}", customTicks, worldTime);
+			}
+		} catch (Exception e) {
+			LOGGER.error("Failed to set time of day", e);
+		} finally {
 			tickCounter = 0;
 		}
 	}
+
 }
