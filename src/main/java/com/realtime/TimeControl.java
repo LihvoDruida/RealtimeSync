@@ -58,16 +58,24 @@ public class TimeControl implements ModInitializer {
 				ServerWorld world = server.getOverworld();
 				if (world != null) {
 					if (CONFIG.customDayLengthMinutes == 0) {
+						// Реальний час
 						LocalTime systemTime = LocalTime.now().plusHours(CONFIG.offsetHours);
 						long secondsFromSixAM = systemTime.getSecond() + systemTime.getMinute() * 60 + (systemTime.getHour() - 6) * 3600;
 						long ticks = (Math.round(secondsFromSixAM * 24000 / 86400.0) + 24000) % 24000;
 						world.setTimeOfDay(ticks);
-					} else {
-						long ticksPerMinute = 20 * 60;
-						long totalDayTicks = CONFIG.customDayLengthMinutes * ticksPerMinute;
-						customTicks = (customTicks + CONFIG.updateInterval) % totalDayTicks;
-						long worldTime = (customTicks * 24000 / totalDayTicks) % 24000;
-						world.setTimeOfDay(worldTime);
+					} else if (CONFIG.customDayLengthMinutes > 0) {
+						// Якщо customDayLengthMinutes більше 0, використовуємо власний таймер доби
+						// 1 хвилина реального часу = 24,000 тік в грі
+						long totalDayTicks = 24000; // Тривалість доби в тиках
+						long ticksPerSecond = totalDayTicks / 60; // Скільки тік буде за 1 секунду (для 1 хвилини)
+
+						// Оновлюємо власний таймер часу, плавно перераховуючи тики
+						customTicks = (customTicks + ticksPerSecond) % totalDayTicks; // Поступове збільшення тика
+
+						// Перетворюємо на тики для світу
+						long worldTime = customTicks % totalDayTicks;
+
+						world.setTimeOfDay(worldTime); // Оновлюємо час світу
 					}
 				} else {
 					throw new Error("Failed to get overworld pointer");
