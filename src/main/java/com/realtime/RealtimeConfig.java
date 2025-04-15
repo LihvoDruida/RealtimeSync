@@ -8,10 +8,13 @@ import me.shedaniel.cloth.clothconfig.shadowed.blue.endless.jankson.Comment;
 @Config(name = "realtime")
 public class RealtimeConfig implements ConfigData {
 
-    @Comment("Частота оновлення часу (в тиках). 20 тік = 1 секунда.")
+    @Comment("Time update interval in ticks. 20 ticks = 1 second.")
     public int updateInterval = 60;
 
-    @Comment("Зсув у годинах відносно системного часу (-23 до +23)")
+    @Comment("Offset from system time in hours (-23 to +23).")
     public int offsetHours = 0;
+
+    @Comment("Duration of a full in-game day in real-world minutes. Set to 0 to use real time.")
+    public int customDayLengthMinutes = 0;
 }
 
