@@ -47,7 +47,7 @@ jobs:
         run: ./gradlew assemble
      
       - name: Generate CHANGELOG.md
-        uses: orhun/git-cliff-action@v2
+        uses: orhun/git-cliff-action@v4.5.1
         with:
           config: cliff.toml
           args: --verbose
