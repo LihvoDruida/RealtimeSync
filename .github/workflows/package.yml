@@ -2,10 +2,8 @@ name: Build and Release
 
 on:
   push:
-    branches: [ main, master ]
-    tags: [ 'v*' ]
-  pull_request:
-  workflow_dispatch:
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
@@ -78,7 +76,6 @@ jobs:
             neoforge/build/libs/realtime-sync-neoforge-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
 
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           fail_on_unmatched_files: true
@@ -89,7 +86,7 @@ jobs:
           body_path: CHANGELOG.md
 
       - name: Publish Fabric and Quilt file to CurseForge
-        if: startsWith(github.ref, 'refs/tags/v') && env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != ''
+        if: env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != ''
         uses: Kira-NT/mc-publish@v3.3
         with:
           curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
@@ -108,7 +105,7 @@ jobs:
             ${{ steps.versions.outputs.java_version }}
 
       - name: Publish Forge file to CurseForge
-        if: startsWith(github.ref, 'refs/tags/v') && env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != ''
+        if: env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != ''
         uses: Kira-NT/mc-publish@v3.3
         with:
           curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
@@ -126,7 +123,7 @@ jobs:
             ${{ steps.versions.outputs.java_version }}
 
       - name: Publish NeoForge file to CurseForge
-        if: startsWith(github.ref, 'refs/tags/v') && env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != ''
+        if: env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != ''
         uses: Kira-NT/mc-publish@v3.3
         with:
           curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
