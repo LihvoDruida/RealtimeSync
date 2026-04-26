@@ -18,7 +18,9 @@ pluginManagement {
 }
 
 dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    // Fabric Loom, ForgeGradle and NeoForge may add loader-specific project repositories.
+    // FAIL_ON_PROJECT_REPOS breaks Loom with LoomLocalRemappedMods.
+    repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
     repositories {
         maven {
             name = 'Fabric'
