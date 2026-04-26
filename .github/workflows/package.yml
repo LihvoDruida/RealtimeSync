@@ -19,6 +19,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Restore Gradle wrapper executable bit
         shell: bash
@@ -38,10 +40,48 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Resolve release version from tag
+        id: tag_version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG="${GITHUB_REF_NAME}"
+          if [[ "${GITHUB_REF_TYPE}" != "tag" || "${TAG}" != v* ]]; then
+            echo "This workflow must be started by a v* tag. Current ref: ${GITHUB_REF_TYPE}/${TAG}" >&2
+            exit 1
+          fi
+
+          MOD_VERSION="${TAG#v}"
+          if [[ -z "${MOD_VERSION}" ]]; then
+            echo "Could not resolve mod version from tag '${TAG}'. Expected tag format like v1.5.5" >&2
+            exit 1
+          fi
+
+          sed -i "s/^mod_version=.*/mod_version=${MOD_VERSION}/" gradle.properties
+
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "mod_version=${MOD_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Resolved mod version from tag: ${MOD_VERSION}"
+          grep '^mod_version=' gradle.properties
+
+      - name: Generate CHANGELOG.md
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --latest --strip header --output CHANGELOG.md
+
+      - name: Verify Changelog
+        shell: bash
+        run: |
+          test -s CHANGELOG.md
+          cat CHANGELOG.md
+
       - name: Read project versions
         id: versions
         shell: bash
         run: |
+          set -euo pipefail
           read_prop() {
             grep "^$1=" gradle.properties | cut -d'=' -f2-
           }
@@ -60,6 +100,7 @@ jobs:
           set -euo pipefail
           MC="${{ steps.versions.outputs.minecraft_version }}"
           MOD="${{ steps.versions.outputs.mod_version }}"
+          test "${MOD}" = "${{ steps.tag_version.outputs.mod_version }}"
           test -f "fabric/build/libs/realtime-sync-fabric-${MC}-${MOD}.jar"
           test -f "forge/build/libs/realtime-sync-forge-${MC}-${MOD}.jar"
           test -f "neoforge/build/libs/realtime-sync-neoforge-${MC}-${MOD}.jar"
