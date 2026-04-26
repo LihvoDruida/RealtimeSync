@@ -1,6 +1,4 @@
-package com.realtime;
-
-import org.apache.logging.log4j.Logger;
+package com.realtime.common;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -22,7 +20,7 @@ public final class RealtimeConfig {
     public int customDayLengthMinutes = 0;
     public boolean debugLogging = false;
 
-    public static RealtimeConfig loadOrCreate(Path path, Path legacyTomlPath, Logger logger) {
+    public static RealtimeConfig loadOrCreate(Path path, Path legacyTomlPath, RealtimeLog logger) {
         RealtimeConfig config = new RealtimeConfig();
         Path sourcePath = Files.exists(path) ? path : legacyTomlPath;
 
@@ -35,7 +33,7 @@ public final class RealtimeConfig {
         try (InputStream inputStream = Files.newInputStream(sourcePath)) {
             properties.load(inputStream);
         } catch (IOException exception) {
-            logger.warn("Failed to read RealtimeSync config. Defaults will be used.", exception);
+            logger.warn("Failed to read RealtimeSync config. Defaults will be used. {}", exception.getMessage());
             config.save(path, logger);
             return config;
         }
@@ -57,7 +55,7 @@ public final class RealtimeConfig {
         return config;
     }
 
-    public void save(Path path, Logger logger) {
+    public void save(Path path, RealtimeLog logger) {
         try {
             Path parent = path.getParent();
             if (parent != null) {
@@ -65,11 +63,11 @@ public final class RealtimeConfig {
             }
             Files.writeString(path, toFileContent(), StandardCharsets.UTF_8);
         } catch (IOException exception) {
-            logger.warn("Failed to save RealtimeSync config.", exception);
+            logger.warn("Failed to save RealtimeSync config. {}", exception.getMessage());
         }
     }
 
-    private void validate(Logger logger) {
+    private void validate(RealtimeLog logger) {
         int originalUpdateInterval = updateInterval;
         int originalOffsetHours = offsetHours;
         int originalCustomDayLength = customDayLengthMinutes;
@@ -107,7 +105,7 @@ public final class RealtimeConfig {
                 + "debugLogging=" + debugLogging + "\n";
     }
 
-    private static boolean readBoolean(Properties properties, String key, boolean fallback, Logger logger) {
+    private static boolean readBoolean(Properties properties, String key, boolean fallback, RealtimeLog logger) {
         String rawValue = properties.getProperty(key);
         if (rawValue == null || rawValue.isBlank()) {
             return fallback;
@@ -125,7 +123,7 @@ public final class RealtimeConfig {
         return fallback;
     }
 
-    private static int readInt(Properties properties, String key, int fallback, Logger logger) {
+    private static int readInt(Properties properties, String key, int fallback, RealtimeLog logger) {
         String rawValue = properties.getProperty(key);
         if (rawValue == null || rawValue.isBlank()) {
             return fallback;

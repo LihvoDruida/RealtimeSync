@@ -1,0 +1,27 @@
+modLoader="javafml"
+loaderVersion="*"
+license="CC0-1.0"
+issueTrackerURL="https://github.com/LihvoDruida/RealtimeSync/issues"
+
+[[mods]]
+modId="realtime"
+version="${version}"
+displayName="RealtimeSync"
+displayURL="https://github.com/LihvoDruida/RealtimeSync"
+logoFile="assets/realtime/icon.png"
+authors="melles1991"
+description='''Synchronizes Minecraft world time with real system time or a configurable custom day length.'''
+
+[[dependencies.realtime]]
+modId="neoforge"
+type="required"
+versionRange="[21.5,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.realtime]]
+modId="minecraft"
+type="required"
+versionRange="[1.21,1.22)"
+ordering="NONE"
+side="BOTH"

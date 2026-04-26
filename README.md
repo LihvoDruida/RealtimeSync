@@ -2,12 +2,25 @@
 
 **Synchronizes Minecraft in-game time with the server's system time or with a custom day duration.**
 
-RealtimeSync is a lightweight **server-side Fabric mod**. It disables Minecraft's vanilla daylight cycle and manually controls world time based on either the real server clock or a configurable custom day length.
+RealtimeSync is a lightweight **server-side Minecraft mod**. It disables Minecraft's vanilla daylight cycle and manually controls world time based on either the real server clock or a configurable custom day length.
+
+## Supported loaders
+
+RealtimeSync now uses a multi-loader project layout:
+
+| Loader | Artifact | Notes |
+| --- | --- | --- |
+| Fabric | `realtime-sync-fabric-<mc-version>-<mod-version>.jar` | Requires Fabric API. |
+| Quilt | Use the Fabric artifact | Quilt is Fabric-compatible, so the Fabric jar is the supported Quilt path. Use the Fabric API / QFAPI setup required by your Quilt instance. |
+| NeoForge | `realtime-sync-neoforge-<mc-version>-<mod-version>.jar` | Native NeoForge entrypoint and `neoforge.mods.toml`. |
+
+Classic Forge is **not bundled** for Minecraft `1.21.x` in this package. For modern `1.21.x` servers, use the NeoForge build.
 
 ## Features
 
 - **Server-side only** — players do not need to install the mod on the client.
-- **Minecraft 1.21.x support** — targets Fabric for `>=1.21 <1.22`.
+- **Minecraft 1.21.x support** — targets `>=1.21 <1.22`.
+- **Fabric / Quilt-compatible jar** and a separate **NeoForge jar**.
 - **No mixins** — safer compatibility with other mods and server environments.
 - **No Cloth Config / AutoConfig dependency** — uses a simple built-in config file.
 - **Real-time sync mode** — matches Minecraft time to the server's system clock.
@@ -19,14 +32,15 @@ RealtimeSync is a lightweight **server-side Fabric mod**. It disables Minecraft'
 ## Compatibility
 
 - **Minecraft**: `1.21.x` (`>=1.21 <1.22`)
-- **Mod loader**: Fabric Loader `0.16.10+`
 - **Java**: `21+`
-- **Required dependency**: Fabric API
+- **Fabric**: Fabric Loader `0.16.10+` and Fabric API
+- **Quilt**: supported through the Fabric-compatible jar
+- **NeoForge**: `21.5+`
 - **Environment**: dedicated server and integrated singleplayer
 
 ## Configuration
 
-The current config file is:
+The current config file is shared between all loaders:
 
 ```txt
 config/realtime.properties
@@ -107,13 +121,57 @@ If `realtime.properties` does not exist yet, RealtimeSync will try to read the o
 
 After migration, edit `realtime.properties` instead of `realtime.toml`.
 
-## How to Install
+## How to install
 
-1. Download the mod `.jar` file.
+### Fabric
+
+1. Download the Fabric jar.
 2. Place it in the `mods` folder of your Fabric server.
-3. Make sure **Fabric API** is installed on the server.
+3. Install Fabric API on the server.
 4. Start the server once to generate the config file.
 5. Edit `config/realtime.properties` if needed.
+
+### Quilt
+
+1. Use the Fabric jar.
+2. Place it in the `mods` folder of your Quilt server.
+3. Install the Fabric API / QFAPI setup required by your Quilt instance.
+4. Start the server once to generate the config file.
+5. Edit `config/realtime.properties` if needed.
+
+### NeoForge
+
+1. Download the NeoForge jar.
+2. Place it in the `mods` folder of your NeoForge server.
+3. Start the server once to generate the config file.
+4. Edit `config/realtime.properties` if needed.
+
+## Building from source
+
+Build everything:
+
+```bash
+./gradlew clean buildAllLoaders
+```
+
+Build only Fabric / Quilt-compatible jar:
+
+```bash
+./gradlew clean buildFabric
+```
+
+Build only NeoForge jar:
+
+```bash
+./gradlew clean buildNeoForge
+```
+
+Output jars:
+
+```txt
+fabric/build/libs/
+neoforge/build/libs/
+```
 
 ## Notes
 
@@ -122,7 +180,8 @@ After migration, edit `realtime.properties` instead of `realtime.toml`.
 - Config changes are usually picked up automatically within about 5 seconds.
 - Use `customDayLengthMinutes=0` for real server clock synchronization.
 - Use `customDayLengthMinutes>0` for a custom day duration.
+- Fabric/Quilt and NeoForge builds share the same config file and the same time calculation logic.
 
 ## License
 
-This project is currently licensed under **CC0-1.0**, according to the included [`LICENSE`](LICENSE) file and `fabric.mod.json` metadata.
+This project is currently licensed under **CC0-1.0**, according to the included [`LICENSE`](LICENSE) file and loader metadata.

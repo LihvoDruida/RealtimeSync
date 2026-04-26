@@ -1,0 +1,52 @@
+plugins {
+    id 'net.neoforged.moddev'
+    id 'maven-publish'
+}
+
+base {
+    archivesName = "${project.archives_base_name}-neoforge-${project.minecraft_version}"
+}
+
+sourceSets.main.java.srcDir(rootProject.file('common/src/main/java'))
+sourceSets.main.resources.srcDir(rootProject.file('common/src/main/resources'))
+
+neoForge {
+    version = project.neoforge_version
+
+    runs {
+        client {
+            client()
+        }
+        server {
+            server()
+        }
+    }
+
+    mods {
+        realtime {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand(version: project.version)
+    }
+}
+
+jar {
+    from(rootProject.file('LICENSE')) {
+        rename { "${it}_${project.base.archivesName.get()}" }
+    }
+}
+
+publishing {
+    publications {
+        create('mavenJava', MavenPublication) {
+            artifactId = project.base.archivesName.get()
+            from components.java
+        }
+    }
+}

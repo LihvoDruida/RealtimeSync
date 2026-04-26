@@ -16,7 +16,7 @@
   "environment": "*",
   "entrypoints": {
     "main": [
-      "com.realtime.TimeControl"
+      "com.realtime.fabric.RealtimeFabric"
     ]
   },
   "depends": {
@@ -24,5 +24,10 @@
     "minecraft": ">=1.21 <1.22",
     "java": ">=21",
     "fabric-api": "*"
+  },
+  "custom": {
+    "modmenu": {
+      "badges": ["library"]
+    }
   }
 }

@@ -1,5 +1,10 @@
-package com.realtime;
+package com.realtime.fabric;
 
+import com.realtime.common.Log4jRealtimeLog;
+import com.realtime.common.RealtimeConfig;
+import com.realtime.common.RealtimeConstants;
+import com.realtime.common.RealtimeLog;
+import com.realtime.common.RealtimeMath;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
@@ -13,28 +18,20 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.LocalTime;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 
-public final class TimeControl implements ModInitializer {
-    public static final String MOD_ID = "realtime";
-    public static final Logger LOGGER = LogManager.getLogger("RealtimeSync");
-
-    private static final long TICKS_PER_DAY = 24000L;
-    private static final long SECONDS_PER_DAY = 86400L;
-    private static final long MINECRAFT_DAY_START_SECONDS = 6L * 60L * 60L;
+public final class RealtimeFabric implements ModInitializer {
+    private static final Logger LOGGER = LogManager.getLogger(RealtimeConstants.MOD_NAME);
+    private static final RealtimeLog LOG = new Log4jRealtimeLog(LOGGER);
     private static final int CONFIG_RELOAD_CHECK_INTERVAL_TICKS = 100;
 
-    public static RealtimeConfig CONFIG = new RealtimeConfig();
+    private RealtimeConfig config = new RealtimeConfig();
+    private final RealtimeMath timeMath = new RealtimeMath();
 
     private Path configPath;
     private Path legacyConfigPath;
     private long configLastModified = -1L;
     private int tickCounter = 0;
     private int configReloadTickCounter = 0;
-    private double customTicks = 0.0D;
-    private boolean customTicksInitialized = false;
 
     @Override
     public void onInitialize() {
@@ -46,28 +43,30 @@ public final class TimeControl implements ModInitializer {
         ServerWorldEvents.LOAD.register(this::onWorldLoad);
         ServerTickEvents.END_SERVER_TICK.register(this::onServerTick);
 
-        LOGGER.info("RealtimeSync loaded. Config: {}", configPath.toAbsolutePath());
+        LOGGER.info("{} loaded for Fabric/Quilt-compatible environments. Config: {}",
+                RealtimeConstants.MOD_NAME,
+                configPath.toAbsolutePath());
     }
 
     private void onWorldLoad(MinecraftServer server, ServerWorld world) {
         reloadConfig(false);
-        if (CONFIG.forceDaylightCycleOff) {
+        if (config.forceDaylightCycleOff) {
             disableDaylightCycle(world, server);
         }
 
-        tickCounter = Math.max(0, CONFIG.updateInterval - 1);
+        tickCounter = Math.max(0, config.updateInterval - 1);
         syncServerTime(server);
     }
 
     private void onServerTick(MinecraftServer server) {
         checkConfigReload();
 
-        if (!CONFIG.enabled) {
+        if (!config.enabled) {
             return;
         }
 
         tickCounter++;
-        if (tickCounter < CONFIG.updateInterval) {
+        if (tickCounter < config.updateInterval) {
             return;
         }
 
@@ -76,61 +75,39 @@ public final class TimeControl implements ModInitializer {
     }
 
     private void syncServerTime(MinecraftServer server) {
-        if (!CONFIG.enabled) {
+        if (!config.enabled) {
             return;
         }
 
         try {
-            if (CONFIG.forceDaylightCycleOff) {
+            if (config.forceDaylightCycleOff) {
                 for (ServerWorld world : server.getWorlds()) {
                     disableDaylightCycle(world, server);
                 }
             }
 
-            long ticks = CONFIG.customDayLengthMinutes > 0
-                    ? calculateCustomTicks(server)
-                    : calculateRealtimeTicks();
+            long ticks = config.customDayLengthMinutes > 0
+                    ? timeMath.calculateCustomTicks(readOverworldTime(server), config.updateInterval, config.customDayLengthMinutes)
+                    : timeMath.calculateRealtimeTicks(config.offsetHours);
 
             applyTime(server, ticks);
 
-            if (CONFIG.debugLogging) {
+            if (config.debugLogging) {
                 LOGGER.info("Synced world time to {} ticks. Mode: {}.", ticks,
-                        CONFIG.customDayLengthMinutes > 0 ? "custom-day-length" : "real-time");
+                        config.customDayLengthMinutes > 0 ? "custom-day-length" : "real-time");
             }
         } catch (RuntimeException exception) {
             LOGGER.error("Failed to synchronize Minecraft time.", exception);
         }
     }
 
-    private long calculateRealtimeTicks() {
-        customTicksInitialized = false;
-
-        LocalTime realTime = ZonedDateTime.now(ZoneId.systemDefault())
-                .plusHours(CONFIG.offsetHours)
-                .toLocalTime();
-
-        long secondsFromMinecraftMorning = Math.floorMod(
-                realTime.toSecondOfDay() - MINECRAFT_DAY_START_SECONDS,
-                SECONDS_PER_DAY
-        );
-
-        return Math.floorMod(Math.round(secondsFromMinecraftMorning * (TICKS_PER_DAY / (double) SECONDS_PER_DAY)), TICKS_PER_DAY);
-    }
-
-    private long calculateCustomTicks(MinecraftServer server) {
-        if (!customTicksInitialized) {
-            ServerWorld overworld = server.getOverworld();
-            customTicks = overworld == null ? 0.0D : Math.floorMod(overworld.getTimeOfDay(), TICKS_PER_DAY);
-            customTicksInitialized = true;
-        }
-
-        double ticksPerUpdate = CONFIG.updateInterval * TICKS_PER_DAY / (CONFIG.customDayLengthMinutes * 60.0D * 20.0D);
-        customTicks = (customTicks + ticksPerUpdate) % TICKS_PER_DAY;
-        return (long) customTicks;
+    private long readOverworldTime(MinecraftServer server) {
+        ServerWorld overworld = server.getOverworld();
+        return overworld == null ? 0L : overworld.getTimeOfDay();
     }
 
     private void applyTime(MinecraftServer server, long ticks) {
-        if (CONFIG.syncAllWorlds) {
+        if (config.syncAllWorlds) {
             for (ServerWorld world : server.getWorlds()) {
                 world.setTimeOfDay(ticks);
             }
@@ -172,10 +149,10 @@ public final class TimeControl implements ModInitializer {
             return;
         }
 
-        CONFIG = RealtimeConfig.loadOrCreate(configPath, legacyConfigPath, LOGGER);
+        config = RealtimeConfig.loadOrCreate(configPath, legacyConfigPath, LOG);
         configLastModified = readModifiedTime(configPath);
-        tickCounter = Math.min(tickCounter, Math.max(0, CONFIG.updateInterval - 1));
-        customTicksInitialized = false;
+        tickCounter = Math.min(tickCounter, Math.max(0, config.updateInterval - 1));
+        timeMath.resetCustomTicks();
 
         if (!force) {
             LOGGER.info("RealtimeSync config reloaded.");
