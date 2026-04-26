@@ -40,12 +40,12 @@ dependencies {
 processResources {
     inputs.property 'version', project.version
     inputs.property 'forge_loader_version', project.forge_loader_version
-    inputs.property 'minecraft_version_range', '[1.21.5,1.21.6)'
+    inputs.property 'minecraft_version_range', '[1.21,26.2)'
     filesMatching('META-INF/mods.toml') {
         expand(
                 version: project.version,
                 forge_loader_version: project.forge_loader_version,
-                minecraft_version_range: '[1.21.5,1.21.6)'
+                minecraft_version_range: '[1.21,26.2)'
         )
     }
 }

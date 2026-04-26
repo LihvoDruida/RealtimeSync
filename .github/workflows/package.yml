@@ -85,10 +85,24 @@ jobs:
           read_prop() {
             grep "^$1=" gradle.properties | cut -d'=' -f2-
           }
+          MC_VERSIONS_FILE="$(read_prop curseforge_game_versions_file)"
+          if [[ -z "${MC_VERSIONS_FILE}" || ! -s "${MC_VERSIONS_FILE}" ]]; then
+            echo "CurseForge game versions file is missing or empty: ${MC_VERSIONS_FILE}" >&2
+            exit 1
+          fi
+
           echo "minecraft_version=$(read_prop minecraft_version)" >> "$GITHUB_OUTPUT"
+          echo "minecraft_compat_label=$(read_prop minecraft_compat_label)" >> "$GITHUB_OUTPUT"
           echo "mod_version=$(read_prop mod_version)" >> "$GITHUB_OUTPUT"
           echo "java_version=$(read_prop java_version)" >> "$GITHUB_OUTPUT"
-          echo "curseforge_game_versions=$(read_prop curseforge_game_versions)" >> "$GITHUB_OUTPUT"
+          {
+            echo 'curseforge_game_versions<<EOF'
+            sed '/^[[:space:]]*#/d;/^[[:space:]]*$/d' "${MC_VERSIONS_FILE}"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+          echo "CurseForge game versions:"
+          sed '/^[[:space:]]*#/d;/^[[:space:]]*$/d' "${MC_VERSIONS_FILE}"
 
       - name: Build all loader jars
         shell: bash
@@ -109,7 +123,7 @@ jobs:
       - name: Upload loader jars
         uses: actions/upload-artifact@v4
         with:
-          name: RealtimeSync-${{ steps.versions.outputs.mod_version }}-mc${{ steps.versions.outputs.minecraft_version }}-loader-jars
+          name: RealtimeSync-${{ steps.versions.outputs.mod_version }}-mc${{ steps.versions.outputs.minecraft_compat_label }}-loader-jars
           if-no-files-found: error
           path: |
             fabric/build/libs/realtime-sync-fabric-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
@@ -133,8 +147,8 @@ jobs:
           curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
           curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
           files: fabric/build/libs/realtime-sync-fabric-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
-          name: RealtimeSync ${{ steps.versions.outputs.mod_version }} [Minecraft ${{ steps.versions.outputs.minecraft_version }}] Fabric/Quilt
-          version: fabric-quilt-${{ steps.versions.outputs.mod_version }}+mc${{ steps.versions.outputs.minecraft_version }}
+          name: RealtimeSync ${{ steps.versions.outputs.mod_version }} [Minecraft ${{ steps.versions.outputs.minecraft_compat_label }}] Fabric/Quilt
+          version: fabric-quilt-${{ steps.versions.outputs.mod_version }}+mc${{ steps.versions.outputs.minecraft_compat_label }}
           version-type: release
           changelog-file: CHANGELOG.md
           loaders: |
@@ -152,8 +166,8 @@ jobs:
           curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
           curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
           files: forge/build/libs/realtime-sync-forge-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
-          name: RealtimeSync ${{ steps.versions.outputs.mod_version }} [Minecraft ${{ steps.versions.outputs.minecraft_version }}] Forge
-          version: forge-${{ steps.versions.outputs.mod_version }}+mc${{ steps.versions.outputs.minecraft_version }}
+          name: RealtimeSync ${{ steps.versions.outputs.mod_version }} [Minecraft ${{ steps.versions.outputs.minecraft_compat_label }}] Forge
+          version: forge-${{ steps.versions.outputs.mod_version }}+mc${{ steps.versions.outputs.minecraft_compat_label }}
           version-type: release
           changelog-file: CHANGELOG.md
           loaders: |
@@ -170,8 +184,8 @@ jobs:
           curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
           curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
           files: neoforge/build/libs/realtime-sync-neoforge-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
-          name: RealtimeSync ${{ steps.versions.outputs.mod_version }} [Minecraft ${{ steps.versions.outputs.minecraft_version }}] NeoForge
-          version: neoforge-${{ steps.versions.outputs.mod_version }}+mc${{ steps.versions.outputs.minecraft_version }}
+          name: RealtimeSync ${{ steps.versions.outputs.mod_version }} [Minecraft ${{ steps.versions.outputs.minecraft_compat_label }}] NeoForge
+          version: neoforge-${{ steps.versions.outputs.mod_version }}+mc${{ steps.versions.outputs.minecraft_compat_label }}
           version-type: release
           changelog-file: CHANGELOG.md
           loaders: |
