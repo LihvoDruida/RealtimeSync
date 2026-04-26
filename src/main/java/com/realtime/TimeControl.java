@@ -1,81 +1,197 @@
 package com.realtime;
 
-import me.shedaniel.autoconfig.AutoConfig;
-import me.shedaniel.autoconfig.serializer.Toml4jConfigSerializer;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.world.GameRules;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.time.LocalDateTime;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 
-public class TimeControl implements ModInitializer {
-	public static final Logger LOGGER = LogManager.getLogger("Realtime");
-	private int tickCounter = 0;
-	private double customTicks = 0.0;
-	public static RealtimeConfig CONFIG;
+public final class TimeControl implements ModInitializer {
+    public static final String MOD_ID = "realtime";
+    public static final Logger LOGGER = LogManager.getLogger("RealtimeSync");
 
-	@Override
-	public void onInitialize() {
-		AutoConfig.register(RealtimeConfig.class, Toml4jConfigSerializer::new);
-		CONFIG = AutoConfig.getConfigHolder(RealtimeConfig.class).getConfig();
+    private static final long TICKS_PER_DAY = 24000L;
+    private static final long SECONDS_PER_DAY = 86400L;
+    private static final long MINECRAFT_DAY_START_SECONDS = 6L * 60L * 60L;
+    private static final int CONFIG_RELOAD_CHECK_INTERVAL_TICKS = 100;
 
-		ServerWorldEvents.LOAD.register(this::DisableDoDaylightCycle);
-		ServerTickEvents.START_SERVER_TICK.register(this::SetTimeToRealtime);
-		LOGGER.info("Successfully loaded Realtime");
-	}
+    public static RealtimeConfig CONFIG = new RealtimeConfig();
 
-	public void DisableDoDaylightCycle(MinecraftServer server, ServerWorld _w) {
-		server.getWorlds().forEach(world -> {
-			world.getGameRules().get(GameRules.DO_DAYLIGHT_CYCLE).set(false, server);
-		});
-		tickCounter = CONFIG.updateInterval - 1;
-		SetTimeToRealtime(server);
-	}
+    private Path configPath;
+    private Path legacyConfigPath;
+    private long configLastModified = -1L;
+    private int tickCounter = 0;
+    private int configReloadTickCounter = 0;
+    private double customTicks = 0.0D;
+    private boolean customTicksInitialized = false;
 
-	public void SetTimeToRealtime(MinecraftServer server) {
-		tickCounter++;
-		if (tickCounter < CONFIG.updateInterval) {
-			return;
-		}
-		try {
-			ServerWorld  world = server.getOverworld();
-			if (world == null) {
-				throw new Error("Failed to get overworld pointer");
-			}
+    @Override
+    public void onInitialize() {
+        Path configDir = FabricLoader.getInstance().getConfigDir();
+        configPath = configDir.resolve("realtime.properties");
+        legacyConfigPath = configDir.resolve("realtime.toml");
+        reloadConfig(true);
 
-			if (CONFIG.customDayLengthMinutes == 0) {
-				ZoneId zoneId = ZoneId.systemDefault(); // Використовуйте часову зону сервера
-				ZonedDateTime systemTime = ZonedDateTime.now(zoneId).plusHours(CONFIG.offsetHours);
-				LocalDateTime localTime = systemTime.toLocalDateTime();
+        ServerWorldEvents.LOAD.register(this::onWorldLoad);
+        ServerTickEvents.END_SERVER_TICK.register(this::onServerTick);
 
-				int effectiveHour = ((localTime.getHour() - 6 + 24) % 24);
-				long secondsFromSixAM = effectiveHour * 3600L
-						+ localTime.getMinute() * 60L
-						+ localTime.getSecond();
-				long ticks = (Math.round(secondsFromSixAM * 24000 / 86400.0) + 24000) % 24000;
+        LOGGER.info("RealtimeSync loaded. Config: {}", configPath.toAbsolutePath());
+    }
 
-				world.setTimeOfDay(ticks);
-				LOGGER.debug("Real Time Mode - Real Time: {}, Game Ticks: {}", localTime, ticks);
-			} else {
-				double addition = (double) CONFIG.updateInterval * 24000 / (CONFIG.customDayLengthMinutes * 60 * 20);
-				customTicks = (customTicks + addition) % 24000.0;
-				long worldTime = (long) customTicks;
+    private void onWorldLoad(MinecraftServer server, ServerWorld world) {
+        reloadConfig(false);
+        if (CONFIG.forceDaylightCycleOff) {
+            disableDaylightCycle(world, server);
+        }
 
-				world.setTimeOfDay(worldTime);
-				LOGGER.debug("Custom Time Mode - Custom Ticks: {}, Game Ticks: {}", customTicks, worldTime);
-			}
-		} catch (Exception e) {
-			LOGGER.error("Failed to set time of day", e);
-		} finally {
-			tickCounter = 0;
-		}
-	}
+        tickCounter = Math.max(0, CONFIG.updateInterval - 1);
+        syncServerTime(server);
+    }
 
+    private void onServerTick(MinecraftServer server) {
+        checkConfigReload();
+
+        if (!CONFIG.enabled) {
+            return;
+        }
+
+        tickCounter++;
+        if (tickCounter < CONFIG.updateInterval) {
+            return;
+        }
+
+        tickCounter = 0;
+        syncServerTime(server);
+    }
+
+    private void syncServerTime(MinecraftServer server) {
+        if (!CONFIG.enabled) {
+            return;
+        }
+
+        try {
+            if (CONFIG.forceDaylightCycleOff) {
+                for (ServerWorld world : server.getWorlds()) {
+                    disableDaylightCycle(world, server);
+                }
+            }
+
+            long ticks = CONFIG.customDayLengthMinutes > 0
+                    ? calculateCustomTicks(server)
+                    : calculateRealtimeTicks();
+
+            applyTime(server, ticks);
+
+            if (CONFIG.debugLogging) {
+                LOGGER.info("Synced world time to {} ticks. Mode: {}.", ticks,
+                        CONFIG.customDayLengthMinutes > 0 ? "custom-day-length" : "real-time");
+            }
+        } catch (RuntimeException exception) {
+            LOGGER.error("Failed to synchronize Minecraft time.", exception);
+        }
+    }
+
+    private long calculateRealtimeTicks() {
+        customTicksInitialized = false;
+
+        LocalTime realTime = ZonedDateTime.now(ZoneId.systemDefault())
+                .plusHours(CONFIG.offsetHours)
+                .toLocalTime();
+
+        long secondsFromMinecraftMorning = Math.floorMod(
+                realTime.toSecondOfDay() - MINECRAFT_DAY_START_SECONDS,
+                SECONDS_PER_DAY
+        );
+
+        return Math.floorMod(Math.round(secondsFromMinecraftMorning * (TICKS_PER_DAY / (double) SECONDS_PER_DAY)), TICKS_PER_DAY);
+    }
+
+    private long calculateCustomTicks(MinecraftServer server) {
+        if (!customTicksInitialized) {
+            ServerWorld overworld = server.getOverworld();
+            customTicks = overworld == null ? 0.0D : Math.floorMod(overworld.getTimeOfDay(), TICKS_PER_DAY);
+            customTicksInitialized = true;
+        }
+
+        double ticksPerUpdate = CONFIG.updateInterval * TICKS_PER_DAY / (CONFIG.customDayLengthMinutes * 60.0D * 20.0D);
+        customTicks = (customTicks + ticksPerUpdate) % TICKS_PER_DAY;
+        return (long) customTicks;
+    }
+
+    private void applyTime(MinecraftServer server, long ticks) {
+        if (CONFIG.syncAllWorlds) {
+            for (ServerWorld world : server.getWorlds()) {
+                world.setTimeOfDay(ticks);
+            }
+            return;
+        }
+
+        ServerWorld overworld = server.getOverworld();
+        if (overworld == null) {
+            LOGGER.warn("Cannot synchronize time: overworld is not available yet.");
+            return;
+        }
+        overworld.setTimeOfDay(ticks);
+    }
+
+    private void disableDaylightCycle(ServerWorld world, MinecraftServer server) {
+        GameRules.BooleanRule rule = world.getGameRules().get(GameRules.DO_DAYLIGHT_CYCLE);
+        if (rule.get()) {
+            rule.set(false, server);
+        }
+    }
+
+    private void checkConfigReload() {
+        configReloadTickCounter++;
+        if (configReloadTickCounter < CONFIG_RELOAD_CHECK_INTERVAL_TICKS) {
+            return;
+        }
+
+        configReloadTickCounter = 0;
+        reloadConfig(false);
+    }
+
+    private void reloadConfig(boolean force) {
+        if (configPath == null) {
+            return;
+        }
+
+        long modifiedTime = readModifiedTime(configPath);
+        if (!force && modifiedTime == configLastModified) {
+            return;
+        }
+
+        CONFIG = RealtimeConfig.loadOrCreate(configPath, legacyConfigPath, LOGGER);
+        configLastModified = readModifiedTime(configPath);
+        tickCounter = Math.min(tickCounter, Math.max(0, CONFIG.updateInterval - 1));
+        customTicksInitialized = false;
+
+        if (!force) {
+            LOGGER.info("RealtimeSync config reloaded.");
+        }
+    }
+
+    private long readModifiedTime(Path path) {
+        if (!Files.exists(path)) {
+            return -1L;
+        }
+
+        try {
+            return Files.getLastModifiedTime(path).toMillis();
+        } catch (IOException exception) {
+            LOGGER.warn("Failed to read RealtimeSync config timestamp.", exception);
+            return -1L;
+        }
+    }
 }

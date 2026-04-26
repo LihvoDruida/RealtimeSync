@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "id": "realtime",
-  "version": "1.2.0",
-  "name": "RealTime",
-  "description": "Synchronize Minecraft world time with system real time.",
+  "version": "${version}",
+  "name": "RealtimeSync",
+  "description": "Synchronizes Minecraft world time with real system time or a configurable custom day length.",
   "authors": [
     "melles1991"
   ],
@@ -19,13 +19,10 @@
       "com.realtime.TimeControl"
     ]
   },
-  "mixins": [
-    "realtime.mixins.json"
-  ],
   "depends": {
-    "fabricloader": ">=0.16.0",
-    "minecraft": ">=1.21 <=1.21.9",
-    "cloth-config": ">=15.0.127",
+    "fabricloader": ">=0.16.10",
+    "minecraft": ">=1.21 <1.22",
+    "java": ">=21",
     "fabric-api": "*"
   }
 }
