@@ -191,15 +191,6 @@ forge/build/libs/
 neoforge/build/libs/
 ```
 
-## CurseForge publishing
-
-See [`CURSEFORGE.md`](CURSEFORGE.md) for the exact file mapping and project settings. In short:
-
-- Project loader checkboxes: **Fabric**, **Quilt**, **Forge**, **NeoForge**.
-- Release files: upload one Fabric/Quilt jar, one Forge jar, and one NeoForge jar.
-- Game version for this release: **Minecraft 1.21.5**.
-- Java version: **Java 21**.
-
 ## Notes
 
 - This mod is **server-side only**. Client installation is not required.
