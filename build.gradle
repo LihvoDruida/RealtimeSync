@@ -25,6 +25,13 @@ subprojects {
     tasks.withType(ProcessResources).configureEach {
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     }
+
+    // Shared common resources are merged into each loader module.
+    // Keep archive tasks resilient if the same resource is accidentally present
+    // in both common and a loader-specific resources directory.
+    tasks.withType(AbstractArchiveTask).configureEach {
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    }
 }
 
 tasks.register('buildFabric') {
