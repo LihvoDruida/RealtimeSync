@@ -8,10 +8,9 @@ import com.realtime.common.RealtimeMath;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.GameRules;
-import net.minecraft.world.level.Level;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.level.LevelEvent;
-import net.minecraftforge.event.tick.LevelTickEvent;
+import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.loading.FMLPaths;
@@ -69,17 +68,9 @@ public final class RealtimeForge {
     }
 
     @SubscribeEvent
-    public void onLevelTick(LevelTickEvent.Post event) {
-        if (!(event.getLevel() instanceof ServerLevel level)) {
-            return;
-        }
+    public void onServerTick(TickEvent.ServerTickEvent.Post event) {
 
-        // Run once per server tick instead of once per loaded dimension.
-        if (!level.dimension().equals(Level.OVERWORLD)) {
-            return;
-        }
-
-        MinecraftServer server = level.getServer();
+        MinecraftServer server = event.getServer();
         if (server != null) {
             onServerTick(server);
         }
