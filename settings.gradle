@@ -5,6 +5,10 @@ pluginManagement {
             url = 'https://maven.fabricmc.net/'
         }
         maven {
+            name = 'Forge'
+            url = 'https://maven.minecraftforge.net/'
+        }
+        maven {
             name = 'NeoForge'
             url = 'https://maven.neoforged.net/releases'
         }
@@ -21,6 +25,10 @@ dependencyResolutionManagement {
             url = 'https://maven.fabricmc.net/'
         }
         maven {
+            name = 'Forge'
+            url = 'https://maven.minecraftforge.net/'
+        }
+        maven {
             name = 'NeoForge'
             url = 'https://maven.neoforged.net/releases'
         }
@@ -30,4 +38,5 @@ dependencyResolutionManagement {
 
 rootProject.name = 'RealtimeSync'
 include 'fabric'
+include 'forge'
 include 'neoforge'

@@ -1,5 +1,6 @@
 plugins {
     id 'fabric-loom' version '1.10.5' apply false
+    id 'net.minecraftforge.gradle' version '6.0.53' apply false
     id 'net.neoforged.moddev' version '2.0.141' apply false
 }
 
@@ -12,13 +13,13 @@ subprojects {
     apply plugin: 'java'
 
     java {
-        toolchain.languageVersion = JavaLanguageVersion.of(21)
+        toolchain.languageVersion = JavaLanguageVersion.of((findProperty('java_version') ?: '21') as int)
         withSourcesJar()
     }
 
     tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'
-        options.release = 21
+        options.release = (findProperty('java_version') ?: '21') as int
     }
 
     tasks.withType(ProcessResources).configureEach {
@@ -32,6 +33,12 @@ tasks.register('buildFabric') {
     dependsOn ':fabric:build'
 }
 
+tasks.register('buildForge') {
+    group = 'build'
+    description = 'Builds the Forge jar.'
+    dependsOn ':forge:build'
+}
+
 tasks.register('buildNeoForge') {
     group = 'build'
     description = 'Builds the NeoForge jar.'
@@ -41,5 +48,5 @@ tasks.register('buildNeoForge') {
 tasks.register('buildAllLoaders') {
     group = 'build'
     description = 'Builds all supported loader jars.'
-    dependsOn ':fabric:build', ':neoforge:build'
+    dependsOn ':fabric:build', ':forge:build', ':neoforge:build'
 }

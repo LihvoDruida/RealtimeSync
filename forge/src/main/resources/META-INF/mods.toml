@@ -1,5 +1,5 @@
 modLoader="javafml"
-loaderVersion="${neoforge_loader_version}"
+loaderVersion="${forge_loader_version}"
 license="CC0-1.0"
 issueTrackerURL="https://github.com/LihvoDruida/RealtimeSync/issues"
 
@@ -13,15 +13,15 @@ authors="melles1991"
 description='''Synchronizes Minecraft world time with real system time or a configurable custom day length.'''
 
 [[dependencies.realtime]]
-modId="neoforge"
-type="required"
-versionRange="${neoforge_loader_version}"
+modId="forge"
+mandatory=true
+versionRange="${forge_loader_version}"
 ordering="NONE"
 side="BOTH"
 
 [[dependencies.realtime]]
 modId="minecraft"
-type="required"
-versionRange="[1.21.5,1.21.6)"
+mandatory=true
+versionRange="${minecraft_version_range}"
 ordering="NONE"
 side="BOTH"

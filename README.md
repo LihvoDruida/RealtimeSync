@@ -6,21 +6,20 @@ RealtimeSync is a lightweight **server-side Minecraft mod**. It disables Minecra
 
 ## Supported loaders
 
-RealtimeSync now uses a multi-loader project layout:
+RealtimeSync uses a multi-loader project layout. Do **not** upload one universal jar for every loader; publish the correct jar for each loader.
 
-| Loader | Artifact | Notes |
-| --- | --- | --- |
-| Fabric | `realtime-sync-fabric-<mc-version>-<mod-version>.jar` | Requires Fabric API. |
-| Quilt | Use the Fabric artifact | Quilt is Fabric-compatible, so the Fabric jar is the supported Quilt path. Use the Fabric API / QFAPI setup required by your Quilt instance. |
-| NeoForge | `realtime-sync-neoforge-<mc-version>-<mod-version>.jar` | Native NeoForge entrypoint and `neoforge.mods.toml`. |
-
-Classic Forge is **not bundled** for Minecraft `1.21.x` in this package. For modern `1.21.x` servers, use the NeoForge build.
+| Loader | Artifact | CurseForge loader tag | Notes |
+| --- | --- | --- | --- |
+| Fabric | `realtime-sync-fabric-<mc-version>-<mod-version>.jar` | Fabric | Requires Fabric API. |
+| Quilt | `realtime-sync-fabric-<mc-version>-<mod-version>.jar` | Quilt | Uses the Fabric-compatible jar. |
+| Forge | `realtime-sync-forge-<mc-version>-<mod-version>.jar` | Forge | Native Forge entrypoint and `META-INF/mods.toml`. |
+| NeoForge | `realtime-sync-neoforge-<mc-version>-<mod-version>.jar` | NeoForge | Native NeoForge entrypoint and `META-INF/neoforge.mods.toml`. |
 
 ## Features
 
 - **Server-side only** — players do not need to install the mod on the client.
-- **Minecraft 1.21.x support** — targets `>=1.21 <1.22`.
-- **Fabric / Quilt-compatible jar** and a separate **NeoForge jar**.
+- **Minecraft 1.21.5 build target** — release files are published with the exact Minecraft version they are built against.
+- Separate **Fabric/Quilt**, **Forge**, and **NeoForge** jars.
 - **No mixins** — safer compatibility with other mods and server environments.
 - **No Cloth Config / AutoConfig dependency** — uses a simple built-in config file.
 - **Real-time sync mode** — matches Minecraft time to the server's system clock.
@@ -31,16 +30,21 @@ Classic Forge is **not bundled** for Minecraft `1.21.x` in this package. For mod
 
 ## Compatibility
 
-- **Minecraft**: `1.21.x` (`>=1.21 <1.22`)
+Current release target:
+
+- **Minecraft**: `1.21.5`
 - **Java**: `21+`
-- **Fabric**: Fabric Loader `0.16.10+` and Fabric API
+- **Fabric**: Fabric Loader `0.16.13+` and Fabric API `0.119.9+1.21.5`
 - **Quilt**: supported through the Fabric-compatible jar
-- **NeoForge**: `21.5+`
+- **Forge**: Forge `55.1.10` for Minecraft `1.21.5`
+- **NeoForge**: NeoForge `21.5.30-beta+`
 - **Environment**: dedicated server and integrated singleplayer
+
+The loader metadata still uses safe Minecraft ranges where supported, but CurseForge files should be uploaded against the exact Minecraft version that was built and tested.
 
 ## Configuration
 
-The current config file is shared between all loaders:
+The config file is shared between all loaders:
 
 ```txt
 config/realtime.properties
@@ -133,11 +137,18 @@ After migration, edit `realtime.properties` instead of `realtime.toml`.
 
 ### Quilt
 
-1. Use the Fabric jar.
+1. Download the Fabric jar.
 2. Place it in the `mods` folder of your Quilt server.
 3. Install the Fabric API / QFAPI setup required by your Quilt instance.
 4. Start the server once to generate the config file.
 5. Edit `config/realtime.properties` if needed.
+
+### Forge
+
+1. Download the Forge jar.
+2. Place it in the `mods` folder of your Forge server.
+3. Start the server once to generate the config file.
+4. Edit `config/realtime.properties` if needed.
 
 ### NeoForge
 
@@ -160,6 +171,12 @@ Build only Fabric / Quilt-compatible jar:
 ./gradlew clean buildFabric
 ```
 
+Build only Forge jar:
+
+```bash
+./gradlew clean buildForge
+```
+
 Build only NeoForge jar:
 
 ```bash
@@ -170,8 +187,18 @@ Output jars:
 
 ```txt
 fabric/build/libs/
+forge/build/libs/
 neoforge/build/libs/
 ```
+
+## CurseForge publishing
+
+See [`CURSEFORGE.md`](CURSEFORGE.md) for the exact file mapping and project settings. In short:
+
+- Project loader checkboxes: **Fabric**, **Quilt**, **Forge**, **NeoForge**.
+- Release files: upload one Fabric/Quilt jar, one Forge jar, and one NeoForge jar.
+- Game version for this release: **Minecraft 1.21.5**.
+- Java version: **Java 21**.
 
 ## Notes
 
@@ -180,7 +207,7 @@ neoforge/build/libs/
 - Config changes are usually picked up automatically within about 5 seconds.
 - Use `customDayLengthMinutes=0` for real server clock synchronization.
 - Use `customDayLengthMinutes>0` for a custom day duration.
-- Fabric/Quilt and NeoForge builds share the same config file and the same time calculation logic.
+- All loader builds share the same config file and the same time calculation logic.
 
 ## License
 

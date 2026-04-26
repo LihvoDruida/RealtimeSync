@@ -10,6 +10,10 @@ on:
 permissions:
   contents: write
 
+env:
+  CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
+  CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -30,15 +34,26 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Read project versions
+        id: versions
+        shell: bash
+        run: |
+          read_prop() {
+            grep "^$1=" gradle.properties | cut -d'=' -f2-
+          }
+          echo "minecraft_version=$(read_prop minecraft_version)" >> "$GITHUB_OUTPUT"
+          echo "mod_version=$(read_prop mod_version)" >> "$GITHUB_OUTPUT"
+
       - name: Build all loaders
         run: ./gradlew clean buildAllLoaders --stacktrace
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: RealtimeSync-loader-jars
+          name: RealtimeSync-${{ steps.versions.outputs.mod_version }}-mc${{ steps.versions.outputs.minecraft_version }}-loader-jars
           path: |
             fabric/build/libs/*.jar
+            forge/build/libs/*.jar
             neoforge/build/libs/*.jar
             !**/*-sources.jar
 
@@ -48,4 +63,58 @@ jobs:
         with:
           files: |
             fabric/build/libs/*.jar
+            forge/build/libs/*.jar
             neoforge/build/libs/*.jar
+          body_path: CHANGELOG.md
+
+      - name: Publish Fabric and Quilt file to CurseForge
+        if: startsWith(github.ref, 'refs/tags/v') && env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != ''
+        uses: Kira-NT/mc-publish@v3.3
+        with:
+          curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
+          curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
+          files: fabric/build/libs/realtime-sync-fabric-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
+          name: RealtimeSync ${{ steps.versions.outputs.mod_version }} for Minecraft ${{ steps.versions.outputs.minecraft_version }} - Fabric/Quilt
+          version: fabric-quilt-${{ steps.versions.outputs.mod_version }}+mc${{ steps.versions.outputs.minecraft_version }}
+          version-type: release
+          changelog-file: CHANGELOG.md
+          loaders: |
+            fabric
+            quilt
+          game-versions: |
+            ${{ steps.versions.outputs.minecraft_version }}
+          java: 21
+
+      - name: Publish Forge file to CurseForge
+        if: startsWith(github.ref, 'refs/tags/v') && env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != ''
+        uses: Kira-NT/mc-publish@v3.3
+        with:
+          curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
+          curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
+          files: forge/build/libs/realtime-sync-forge-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
+          name: RealtimeSync ${{ steps.versions.outputs.mod_version }} for Minecraft ${{ steps.versions.outputs.minecraft_version }} - Forge
+          version: forge-${{ steps.versions.outputs.mod_version }}+mc${{ steps.versions.outputs.minecraft_version }}
+          version-type: release
+          changelog-file: CHANGELOG.md
+          loaders: |
+            forge
+          game-versions: |
+            ${{ steps.versions.outputs.minecraft_version }}
+          java: 21
+
+      - name: Publish NeoForge file to CurseForge
+        if: startsWith(github.ref, 'refs/tags/v') && env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != ''
+        uses: Kira-NT/mc-publish@v3.3
+        with:
+          curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
+          curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
+          files: neoforge/build/libs/realtime-sync-neoforge-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
+          name: RealtimeSync ${{ steps.versions.outputs.mod_version }} for Minecraft ${{ steps.versions.outputs.minecraft_version }} - NeoForge
+          version: neoforge-${{ steps.versions.outputs.mod_version }}+mc${{ steps.versions.outputs.minecraft_version }}
+          version-type: release
+          changelog-file: CHANGELOG.md
+          loaders: |
+            neoforge
+          game-versions: |
+            ${{ steps.versions.outputs.minecraft_version }}
+          java: 21
