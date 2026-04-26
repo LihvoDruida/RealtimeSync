@@ -1,19 +1,38 @@
 # RealtimeSync
 
-Fabric mod that synchronizes Minecraft world time with the server system clock or a configurable custom day length.
+**Synchronizes Minecraft in-game time with the server's system time or with a custom day duration.**
+
+RealtimeSync is a lightweight **server-side Fabric mod**. It disables Minecraft's vanilla daylight cycle and manually controls world time based on either the real server clock or a configurable custom day length.
+
+## Features
+
+- **Server-side only** — players do not need to install the mod on the client.
+- **Minecraft 1.21.x support** — targets Fabric for `>=1.21 <1.22`.
+- **No mixins** — safer compatibility with other mods and server environments.
+- **No Cloth Config / AutoConfig dependency** — uses a simple built-in config file.
+- **Real-time sync mode** — matches Minecraft time to the server's system clock.
+- **Custom day length mode** — allows a full Minecraft day to last a custom number of real-world minutes.
+- **Multi-dimension support** — can synchronize all loaded worlds/dimensions, not only the Overworld.
+- **Hot config reload** — the config is checked automatically about every 5 seconds.
+- **Legacy config migration** — old `config/realtime.toml` values are migrated once to the new `config/realtime.properties` file.
 
 ## Compatibility
 
-- Minecraft: `1.21.x` (`>=1.21 <1.22`)
-- Java: `21+`
-- Loader: Fabric Loader `0.16.10+`
-- Required: Fabric API
+- **Minecraft**: `1.21.x` (`>=1.21 <1.22`)
+- **Mod loader**: Fabric Loader `0.16.10+`
+- **Java**: `21+`
+- **Required dependency**: Fabric API
+- **Environment**: dedicated server and integrated singleplayer
 
-The mod avoids mixins and client-only code, so it is safer for dedicated servers and integrated singleplayer worlds.
+## Configuration
 
-## Config
+The current config file is:
 
-Config file: `config/realtime.properties`
+```txt
+config/realtime.properties
+```
+
+Example config:
 
 ```properties
 enabled=true
@@ -25,18 +44,85 @@ customDayLengthMinutes=0
 debugLogging=false
 ```
 
-### Options
+### `enabled`
 
-- `enabled` — enables or disables the mod.
-- `forceDaylightCycleOff` — keeps vanilla daylight cycle disabled.
-- `syncAllWorlds` — syncs all loaded dimensions. Set to `false` to sync only Overworld.
-- `updateInterval` — sync interval in ticks. `20` ticks = 1 second.
-- `offsetHours` — shifts real-time sync by `-23..23` hours.
-- `customDayLengthMinutes` — `0` uses real clock sync. Any value above `0` uses a custom Minecraft day length.
-- `debugLogging` — logs every sync operation.
+- **Type**: Boolean
+- **Default**: `true`
+- **Description**: Enables or disables RealtimeSync without removing the mod.
 
-The config is checked automatically every 5 seconds, so server restarts are usually not needed for simple changes.
+### `forceDaylightCycleOff`
 
-## Migration note
+- **Type**: Boolean
+- **Default**: `true`
+- **Description**: Keeps the vanilla `doDaylightCycle` gamerule disabled so Minecraft does not fight against the mod's manual time control.
 
-Older versions used `config/realtime.toml` through Cloth Config / AutoConfig. If `realtime.properties` does not exist yet, the mod reads the old TOML-style file once and writes a new `realtime.properties` file with the same supported values.
+### `syncAllWorlds`
+
+- **Type**: Boolean
+- **Default**: `true`
+- **Description**: Synchronizes time for all loaded worlds/dimensions, including the Overworld, Nether, End and custom dimensions. Set this to `false` if you want to synchronize only the Overworld.
+
+### `updateInterval`
+
+- **Type**: Integer
+- **Default**: `60`
+- **Range**: `1` to `36000`
+- **Description**: The interval, in server ticks, between time updates. `20` ticks = 1 second, so `60` means the time is updated every 3 seconds.
+
+### `offsetHours`
+
+- **Type**: Integer
+- **Default**: `0`
+- **Range**: `-23` to `23`
+- **Description**: Shifts real-time synchronization by the given number of hours. Positive values move time forward, negative values move it backward. Example: `offsetHours=2` shifts the in-game time 2 hours ahead of the server clock.
+
+### `customDayLengthMinutes`
+
+- **Type**: Integer
+- **Default**: `0`
+- **Range**: `0` to `10080`
+- **Description**: Sets a custom duration for a full Minecraft day in real-world minutes. If set to `0`, the mod uses the server's system time. Example: `customDayLengthMinutes=1` makes a full Minecraft day last 1 real minute.
+
+### `debugLogging`
+
+- **Type**: Boolean
+- **Default**: `false`
+- **Description**: Enables detailed log messages for each time synchronization operation. Useful for debugging, but not recommended for normal gameplay servers.
+
+## Legacy `realtime.toml` migration
+
+Older versions used:
+
+```txt
+config/realtime.toml
+```
+
+The new version uses:
+
+```txt
+config/realtime.properties
+```
+
+If `realtime.properties` does not exist yet, RealtimeSync will try to read the old `realtime.toml` file once and create a new `realtime.properties` file with the supported values.
+
+After migration, edit `realtime.properties` instead of `realtime.toml`.
+
+## How to Install
+
+1. Download the mod `.jar` file.
+2. Place it in the `mods` folder of your Fabric server.
+3. Make sure **Fabric API** is installed on the server.
+4. Start the server once to generate the config file.
+5. Edit `config/realtime.properties` if needed.
+
+## Notes
+
+- This mod is **server-side only**. Client installation is not required.
+- The mod controls time manually, so `doDaylightCycle` is disabled by default.
+- Config changes are usually picked up automatically within about 5 seconds.
+- Use `customDayLengthMinutes=0` for real server clock synchronization.
+- Use `customDayLengthMinutes>0` for a custom day duration.
+
+## License
+
+This project is currently licensed under **CC0-1.0**, according to the included [`LICENSE`](LICENSE) file and `fabric.mod.json` metadata.
