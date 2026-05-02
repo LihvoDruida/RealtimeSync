@@ -20,10 +20,10 @@
     ]
   },
   "depends": {
-    "fabricloader": ">=0.16.10",
-    "minecraft": ">=1.21 <26.2",
-    "java": ">=21",
-    "fabric-api": "*"
+    "fabricloader": ">=${loader_version}",
+    "minecraft": "${minecraft_version_range_fabric}",
+    "java": ">=${java_version}",
+    "fabric-api": ">=${fabric_api_min_version}"
   },
   "custom": {
     "modmenu": {

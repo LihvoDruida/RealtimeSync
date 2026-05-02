@@ -22,6 +22,6 @@ side="BOTH"
 [[dependencies.realtime]]
 modId="minecraft"
 type="required"
-versionRange="[1.21,26.2)"
+versionRange="${minecraft_version_range}"
 ordering="NONE"
 side="BOTH"

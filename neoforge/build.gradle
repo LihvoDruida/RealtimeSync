@@ -32,10 +32,12 @@ neoForge {
 processResources {
     inputs.property 'version', project.version
     inputs.property 'neoforge_loader_version', project.neoforge_loader_version
+    inputs.property 'minecraft_version_range_mods_toml', project.minecraft_version_range_mods_toml
     filesMatching('META-INF/neoforge.mods.toml') {
         expand(
                 version: project.version,
-                neoforge_loader_version: project.neoforge_loader_version
+                neoforge_loader_version: project.neoforge_loader_version,
+                minecraft_version_range: project.minecraft_version_range_mods_toml
         )
     }
 }

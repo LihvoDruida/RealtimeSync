@@ -1,15 +1,4 @@
-1.21
-1.21.1
-1.21.2
-1.21.3
-1.21.4
+# This file is intentionally strict.
+# The GitHub Actions release workflow generates one CurseForge upload per build profile.
+# Do not list unbuilt versions here.
 1.21.5
-1.21.6
-1.21.7
-1.21.8
-1.21.9
-1.21.10
-1.21.11
-26.1
-26.1.1
-26.1.2

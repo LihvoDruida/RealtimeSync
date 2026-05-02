@@ -1,10 +1,36 @@
 plugins {
-    id 'fabric-loom' version '1.10.5' apply false
+    id 'fabric-loom' version '1.11.8' apply false
     id 'net.minecraftforge.gradle' version '6.0.53' apply false
     id 'net.neoforged.moddev' version '2.0.141' apply false
 }
 
+import java.util.Properties
+
+ext.loadMinecraftProfile = {
+    String requestedProfile = (findProperty('mcProfile') ?: System.getenv('MC_PROFILE') ?: findProperty('minecraft_version') ?: '1.21.5').toString()
+    File profileFile = rootProject.file("buildProfiles/${requestedProfile}.properties")
+
+    Properties loaded = new Properties()
+    if (profileFile.isFile()) {
+        profileFile.withInputStream { loaded.load(it) }
+    } else {
+        logger.warn("Minecraft build profile '${requestedProfile}' was not found at ${profileFile}. Falling back to gradle.properties values.")
+    }
+
+    loaded.setProperty('mcProfile', requestedProfile)
+    loaded.setProperty('minecraft_profile', requestedProfile)
+    loaded.setProperty('profile_file', profileFile.path)
+
+    return loaded
+}
+
+def minecraftProfileProperties = loadMinecraftProfile()
+
 allprojects {
+    minecraftProfileProperties.each { key, value ->
+        extensions.extraProperties.set(key.toString(), value.toString())
+    }
+
     group = project.maven_group
     version = project.mod_version
 }
@@ -34,26 +60,42 @@ subprojects {
     }
 }
 
+tasks.register('printBuildProfile') {
+    group = 'help'
+    description = 'Prints the resolved Minecraft build profile used by Gradle.'
+    doLast {
+        println "mcProfile=${rootProject.ext.mcProfile}"
+        println "minecraft_version=${rootProject.ext.minecraft_version}"
+        println "minecraft_compat_label=${rootProject.ext.minecraft_compat_label}"
+        println "minecraft_version_range_fabric=${rootProject.ext.minecraft_version_range_fabric}"
+        println "minecraft_version_range_mods_toml=${rootProject.ext.minecraft_version_range_mods_toml}"
+        println "java_version=${rootProject.ext.java_version}"
+        println "fabric_version=${rootProject.ext.fabric_version}"
+        println "forge_version=${rootProject.ext.forge_version}"
+        println "neoforge_version=${rootProject.ext.neoforge_version}"
+    }
+}
+
 tasks.register('buildFabric') {
     group = 'build'
-    description = 'Builds the Fabric/Quilt-compatible jar.'
+    description = 'Builds the Fabric/Quilt-compatible jar for the selected Minecraft profile.'
     dependsOn ':fabric:build'
 }
 
 tasks.register('buildForge') {
     group = 'build'
-    description = 'Builds the Forge jar.'
+    description = 'Builds the Forge jar for the selected Minecraft profile.'
     dependsOn ':forge:build'
 }
 
 tasks.register('buildNeoForge') {
     group = 'build'
-    description = 'Builds the NeoForge jar.'
+    description = 'Builds the NeoForge jar for the selected Minecraft profile.'
     dependsOn ':neoforge:build'
 }
 
 tasks.register('buildAllLoaders') {
     group = 'build'
-    description = 'Builds all supported loader jars.'
+    description = 'Builds all supported loader jars for the selected Minecraft profile.'
     dependsOn ':fabric:build', ':forge:build', ':neoforge:build'
 }

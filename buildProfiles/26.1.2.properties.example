@@ -1,0 +1,24 @@
+# Experimental Minecraft 26.1.2 profile.
+# Do not add this to the release matrix until the source is ported from Yarn-named
+# Fabric code to the 26.1 Mojang/unobfuscated mapping setup.
+# Fabric documents that 26.1 requires Loom 1.15+, Gradle 9.4+ and Java 25.
+
+minecraft_version=26.1.2
+minecraft_compat_label=26.1.2
+minecraft_version_range_fabric=>=26.1.2 <26.1.3
+minecraft_version_range_mods_toml=[26.1.2,26.1.3)
+java_version=25
+curseforge_java_versions=Java 25
+
+fabric_loader_version=0.18.4
+loader_version=0.18.4
+fabric_api_min_version=0.146.0+26.1.2
+fabric_version=0.146.0+26.1.2
+# 26.1+ Fabric requires Mojang/unobfuscated mappings, not Yarn.
+yarn_mappings=
+
+forge_version=64.0.6
+forge_loader_version=[64,)
+
+neoforge_version=26.1.2.31-beta
+neoforge_loader_version=[26.1,)

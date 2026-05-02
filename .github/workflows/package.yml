@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -15,6 +16,14 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mc_profile: '1.21.5'
+            java_version: '21'
+          - mc_profile: '1.21.10'
+            java_version: '21'
 
     steps:
       - name: Checkout
@@ -35,7 +44,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 21
+          java-version: ${{ matrix.java_version }}
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -46,30 +55,42 @@ jobs:
         run: |
           set -euo pipefail
 
-          TAG="${GITHUB_REF_NAME}"
-          if [[ "${GITHUB_REF_TYPE}" != "tag" || "${TAG}" != v* ]]; then
-            echo "This workflow must be started by a v* tag. Current ref: ${GITHUB_REF_TYPE}/${TAG}" >&2
-            exit 1
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            TAG="${GITHUB_REF_NAME}"
+            if [[ "${TAG}" != v* ]]; then
+              echo "This workflow tag must use v* format. Current tag: ${TAG}" >&2
+              exit 1
+            fi
+            MOD_VERSION="${TAG#v}"
+          else
+            MOD_VERSION="0.0.0-dev.${GITHUB_RUN_NUMBER}"
           fi
 
-          MOD_VERSION="${TAG#v}"
           if [[ -z "${MOD_VERSION}" ]]; then
-            echo "Could not resolve mod version from tag '${TAG}'. Expected tag format like v1.5.5" >&2
+            echo "Could not resolve mod version. Expected tag format like v1.5.5" >&2
             exit 1
           fi
 
           sed -i "s/^mod_version=.*/mod_version=${MOD_VERSION}/" gradle.properties
 
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "mod_version=${MOD_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Resolved mod version from tag: ${MOD_VERSION}"
+          echo "Resolved mod version: ${MOD_VERSION}"
           grep '^mod_version=' gradle.properties
 
       - name: Generate CHANGELOG.md
+        if: github.ref_type == 'tag'
         uses: orhun/git-cliff-action@v4
         with:
           config: cliff.toml
           args: --latest --strip header --output CHANGELOG.md
+
+      - name: Generate development changelog placeholder
+        if: github.ref_type != 'tag'
+        shell: bash
+        run: |
+          cat > CHANGELOG.md <<'CHANGELOG'
+          Development build from workflow_dispatch.
+          CHANGELOG
 
       - name: Verify Changelog
         shell: bash
@@ -77,36 +98,42 @@ jobs:
           test -s CHANGELOG.md
           cat CHANGELOG.md
 
-      - name: Read project versions
+      - name: Read selected build profile
         id: versions
         shell: bash
         run: |
           set -euo pipefail
-          read_prop() {
-            grep "^$1=" gradle.properties | cut -d'=' -f2-
-          }
-          MC_VERSIONS_FILE="$(read_prop curseforge_game_versions_file)"
-          if [[ -z "${MC_VERSIONS_FILE}" || ! -s "${MC_VERSIONS_FILE}" ]]; then
-            echo "CurseForge game versions file is missing or empty: ${MC_VERSIONS_FILE}" >&2
+          PROFILE="${{ matrix.mc_profile }}"
+          PROFILE_FILE="buildProfiles/${PROFILE}.properties"
+          if [[ ! -s "${PROFILE_FILE}" ]]; then
+            echo "Missing Minecraft build profile: ${PROFILE_FILE}" >&2
             exit 1
           fi
 
-          echo "minecraft_version=$(read_prop minecraft_version)" >> "$GITHUB_OUTPUT"
-          echo "minecraft_compat_label=$(read_prop minecraft_compat_label)" >> "$GITHUB_OUTPUT"
-          echo "mod_version=$(read_prop mod_version)" >> "$GITHUB_OUTPUT"
-          echo "java_version=$(read_prop java_version)" >> "$GITHUB_OUTPUT"
-          {
-            echo 'curseforge_game_versions<<EOF'
-            sed '/^[[:space:]]*#/d;/^[[:space:]]*$/d' "${MC_VERSIONS_FILE}"
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
+          read_profile_prop() {
+            grep "^$1=" "${PROFILE_FILE}" | cut -d'=' -f2-
+          }
+          read_gradle_prop() {
+            grep "^$1=" gradle.properties | cut -d'=' -f2-
+          }
 
-          echo "CurseForge game versions:"
-          sed '/^[[:space:]]*#/d;/^[[:space:]]*$/d' "${MC_VERSIONS_FILE}"
+          MC_VERSION="$(read_profile_prop minecraft_version)"
+          MC_LABEL="$(read_profile_prop minecraft_compat_label)"
+          JAVA_VERSION="$(read_profile_prop java_version)"
+          MOD_VERSION="$(read_gradle_prop mod_version)"
 
-      - name: Build all loader jars
+          echo "mc_profile=${PROFILE}" >> "$GITHUB_OUTPUT"
+          echo "minecraft_version=${MC_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "minecraft_compat_label=${MC_LABEL}" >> "$GITHUB_OUTPUT"
+          echo "java_version=${JAVA_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "mod_version=${MOD_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "curseforge_game_versions=${MC_VERSION}" >> "$GITHUB_OUTPUT"
+
+          echo "Selected profile ${PROFILE}: Minecraft ${MC_VERSION}, Java ${JAVA_VERSION}"
+
+      - name: Build all loader jars for profile
         shell: bash
-        run: bash ./gradlew clean buildAllLoaders --stacktrace
+        run: bash ./gradlew -PmcProfile=${{ steps.versions.outputs.mc_profile }} clean buildAllLoaders --stacktrace
 
       - name: Verify release jars
         shell: bash
@@ -130,7 +157,8 @@ jobs:
             forge/build/libs/realtime-sync-forge-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
             neoforge/build/libs/realtime-sync-neoforge-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
 
-      - name: Publish GitHub Release
+      - name: Publish GitHub Release files
+        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
           fail_on_unmatched_files: true
@@ -141,7 +169,7 @@ jobs:
           body_path: CHANGELOG.md
 
       - name: Publish Fabric and Quilt file to CurseForge
-        if: env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != ''
+        if: github.ref_type == 'tag' && env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != ''
         uses: Kira-NT/mc-publish@v3.3
         with:
           curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
@@ -160,7 +188,7 @@ jobs:
             ${{ steps.versions.outputs.java_version }}
 
       - name: Publish Forge file to CurseForge
-        if: env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != ''
+        if: github.ref_type == 'tag' && env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != ''
         uses: Kira-NT/mc-publish@v3.3
         with:
           curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
@@ -178,7 +206,7 @@ jobs:
             ${{ steps.versions.outputs.java_version }}
 
       - name: Publish NeoForge file to CurseForge
-        if: env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != ''
+        if: github.ref_type == 'tag' && env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != ''
         uses: Kira-NT/mc-publish@v3.3
         with:
           curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
