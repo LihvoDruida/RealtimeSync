@@ -127,15 +127,16 @@ public final class RealtimeController {
 
             long ticksToApply = config.isSmoothSyncMode()
                     ? timeMath.calculateSmoothTicks(
-                            RealtimeWorldTime.readDayTime(level),
+                            RealtimeWorldTime.readDayTimeOrFallback(level, targetTicks),
                             targetTicks,
                             config.maxSmoothStepTicks,
                             config.smoothSnapThresholdTicks,
                             config.smoothCatchupDivisor
                     )
                     : targetTicks;
-            RealtimeWorldTime.setDayTime(level, ticksToApply);
-            syncedWorlds++;
+            if (RealtimeWorldTime.setDayTime(server, level, ticksToApply, logger)) {
+                syncedWorlds++;
+            }
         }
 
         if (config.debugLogging && skippedForSleep && !sleepSkipLogged) {
@@ -185,7 +186,9 @@ public final class RealtimeController {
             return;
         }
 
-        gameRules.disableDaylightCycle(level, server);
+        if (!gameRules.disableDaylightCycle(level, server)) {
+            RealtimeWorldTime.pauseClock(server, level, logger);
+        }
     }
 
     private void ensureDaylightCycleOff(MinecraftServer server, boolean force) {
@@ -203,7 +206,9 @@ public final class RealtimeController {
         daylightRuleGuardTickCounter = 0;
         for (ServerLevel level : server.getAllLevels()) {
             if (shouldSyncLevel(level)) {
-                gameRules.disableDaylightCycle(level, server);
+                if (!gameRules.disableDaylightCycle(level, server)) {
+            RealtimeWorldTime.pauseClock(server, level, logger);
+        }
             }
         }
     }

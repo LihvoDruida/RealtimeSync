@@ -65,3 +65,7 @@ Do not reintroduce `ServerWorldEvents.LOAD`: Fabric API `26.1.x` does not expose
 that class in `net.fabricmc.fabric.api.event.lifecycle.v1`, so using it breaks the
 `26.1`, `26.1.1`, and `26.1.2` Fabric/Quilt builds. The common controller performs
 initial daylight-cycle guarding and the first sync from the server tick path instead.
+
+### Minecraft 26.1.x time compatibility
+
+26.1.x moves vanilla time control to World Clocks. RealtimeSync therefore uses direct accessors only when they exist and falls back to server commands for the clock API. The fallback commands are intentionally limited to `/time` world-clock commands and do not use gamerule commands.

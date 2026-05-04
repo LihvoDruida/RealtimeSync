@@ -275,3 +275,9 @@ Do not reintroduce `ServerWorldEvents.LOAD`: Fabric API `26.1.x` does not expose
 that class in `net.fabricmc.fabric.api.event.lifecycle.v1`, so using it breaks the
 `26.1`, `26.1.1`, and `26.1.2` Fabric/Quilt builds. The common controller performs
 initial daylight-cycle guarding and the first sync from the server tick path instead.
+
+## 26.1.x Fabric/Quilt runtime notes
+
+Minecraft 26.1.x uses the World Clock system for time control. The common runtime now uses direct level/level-data access when available and falls back to `time of <clock> set <ticks>` / `time of <clock> pause` when direct APIs are not exposed by the runtime. This avoids crashes such as `Could not resolve a compatible day-time accessor for net.minecraft.server.level.ServerLevel` on Fabric 26.1.x.
+
+Quilt/Fabric dependency resolution also includes `https://repo1.maven.org/maven2/` explicitly because some CI runs failed to resolve JetBrains annotations / SLF4J parent metadata through the default Maven Central mirror.

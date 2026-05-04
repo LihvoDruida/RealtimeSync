@@ -11,16 +11,17 @@ import java.util.concurrent.ConcurrentMap;
 /**
  * Cross-version world time access.
  *
- * <p>The 1.21.x and 26.1.x mapped APIs do not expose the same convenience methods on
- * {@link ServerLevel}. This class deliberately avoids compile-time calls such as
- * {@code ServerLevel#getDayTime()} and {@code ServerLevel#setDayTime(long)}. It resolves the
- * available public API once per runtime class and then reuses the cached accessor.</p>
+ * <p>1.21.x exposes day-time through level/level-data APIs, while 26.1.x moved
+ * time to the World Clock system. This helper first uses direct/reflection APIs
+ * when available, then falls back to a command-backed clock mode for 26.1.x.</p>
  */
 public final class RealtimeWorldTime {
     private static final long TICKS_PER_DAY = 24000L;
     private static final ConcurrentMap<Class<?>, TimeAccessor> ACCESSORS = new ConcurrentHashMap<>();
     private static final ConcurrentMap<Class<?>, Method> LEVEL_DATA_METHODS = new ConcurrentHashMap<>();
     private static final ConcurrentMap<Class<?>, Method> DIMENSION_METHODS = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<String, Long> FALLBACK_TIMES = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<String, Boolean> CLOCKS_PAUSED = new ConcurrentHashMap<>();
 
     private RealtimeWorldTime() {
     }
@@ -32,15 +33,24 @@ public final class RealtimeWorldTime {
                 fallback = level;
             }
             if (dimensionId(level).equals("minecraft:overworld")) {
-                return readDayTime(level);
+                return readDayTimeOrFallback(level, fallbackTime("minecraft:overworld", 0L));
             }
         }
 
         if (fallback != null) {
-            return readDayTime(fallback);
+            String id = dimensionId(fallback);
+            return readDayTimeOrFallback(fallback, fallbackTime(id, 0L));
         }
 
         return 0L;
+    }
+
+    public static long readDayTimeOrFallback(ServerLevel level, long fallback) {
+        try {
+            return readDayTime(level);
+        } catch (RuntimeException ignored) {
+            return fallbackTime(dimensionId(level), fallback);
+        }
     }
 
     public static long readDayTime(ServerLevel level) {
@@ -48,9 +58,50 @@ public final class RealtimeWorldTime {
         return accessor.read(level);
     }
 
-    public static void setDayTime(ServerLevel level, long dayTime) {
-        TimeAccessor accessor = ACCESSORS.computeIfAbsent(level.getClass(), ignored -> resolveAccessor(level));
-        accessor.write(level, Math.floorMod(dayTime, TICKS_PER_DAY));
+    public static boolean setDayTime(MinecraftServer server, ServerLevel level, long dayTime, RealtimeLog logger) {
+        long normalized = Math.floorMod(dayTime, TICKS_PER_DAY);
+        String dimensionId = dimensionId(level);
+
+        TimeAccessor accessor = ACCESSORS.get(level.getClass());
+        if (accessor == null) {
+            try {
+                accessor = ACCESSORS.computeIfAbsent(level.getClass(), ignored -> resolveAccessor(level));
+            } catch (RuntimeException ignored) {
+                accessor = null;
+            }
+        }
+
+        if (accessor != null) {
+            try {
+                accessor.write(level, normalized);
+                FALLBACK_TIMES.put(dimensionId, normalized);
+                return true;
+            } catch (RuntimeException ignored) {
+                // Fall through to command-backed 26.1 world clock mode.
+            }
+        }
+
+        if (setClockTime(server, dimensionId, normalized, logger)) {
+            FALLBACK_TIMES.put(dimensionId, normalized);
+            return true;
+        }
+
+        logger.warn("Could not set time for {}: neither level accessors nor world-clock commands are available.", dimensionId);
+        return false;
+    }
+
+    public static boolean pauseClock(MinecraftServer server, ServerLevel level, RealtimeLog logger) {
+        String dimensionId = dimensionId(level);
+        String clockId = clockIdForDimension(dimensionId);
+        if (CLOCKS_PAUSED.putIfAbsent(clockId, Boolean.TRUE) != null) {
+            return true;
+        }
+
+        boolean paused = RealtimeCommands.execute(server, "time of " + clockId + " pause", logger);
+        if (!paused) {
+            CLOCKS_PAUSED.remove(clockId);
+        }
+        return paused;
     }
 
     public static String dimensionId(ServerLevel level) {
@@ -73,7 +124,32 @@ public final class RealtimeWorldTime {
         if (normalized.endsWith("]")) {
             normalized = normalized.substring(0, normalized.length() - 1);
         }
-        return normalized;
+        return normalized.isBlank() ? "minecraft:overworld" : normalized;
+    }
+
+    private static boolean setClockTime(MinecraftServer server, String dimensionId, long dayTime, RealtimeLog logger) {
+        String clockId = clockIdForDimension(dimensionId);
+        if (RealtimeCommands.execute(server, "time of " + clockId + " set " + dayTime, logger)) {
+            return true;
+        }
+
+        // Some dimensions only expose their default clock through the legacy command shape.
+        // Keep this as a silent fallback for non-overworld/custom dimensions.
+        return RealtimeCommands.execute(server, "time set " + dayTime, logger);
+    }
+
+    private static String clockIdForDimension(String dimensionId) {
+        if (dimensionId == null || dimensionId.isBlank()) {
+            return "minecraft:overworld";
+        }
+        if (dimensionId.equals("minecraft:the_nether") || dimensionId.equals("minecraft:the_end")) {
+            return dimensionId;
+        }
+        return dimensionId;
+    }
+
+    private static long fallbackTime(String dimensionId, long fallback) {
+        return FALLBACK_TIMES.getOrDefault(dimensionId, Math.floorMod(fallback, TICKS_PER_DAY));
     }
 
     private static TimeAccessor resolveAccessor(ServerLevel sampleLevel) {
@@ -104,23 +180,22 @@ public final class RealtimeWorldTime {
             return cached;
         }
 
-        Method exact = findZeroArgMethod(levelClass, "getLevelData");
-        if (exact != null) {
-            LEVEL_DATA_METHODS.put(levelClass, exact);
-            return exact;
+        for (String name : new String[] {"getLevelData", "getData", "serverLevelData", "levelData"}) {
+            Method method = findZeroArgMethod(levelClass, name);
+            if (method != null) {
+                LEVEL_DATA_METHODS.put(levelClass, method);
+                return method;
+            }
         }
-
-        Method fallback = findZeroArgMethod(levelClass, "getData");
-        if (fallback != null) {
-            LEVEL_DATA_METHODS.put(levelClass, fallback);
-        }
-        return fallback;
+        return null;
     }
 
     private static Method findGetter(Class<?> type) {
-        Method exact = findZeroArgMethod(type, "getDayTime");
-        if (exact != null && isNumericReturn(exact)) {
-            return exact;
+        for (String name : new String[] {"getDayTime", "getGameTime", "dayTime", "timeOfDay"}) {
+            Method exact = findZeroArgMethod(type, name);
+            if (exact != null && isNumericReturn(exact)) {
+                return exact;
+            }
         }
 
         for (Method method : type.getMethods()) {
@@ -128,7 +203,7 @@ public final class RealtimeWorldTime {
                 continue;
             }
             String name = method.getName().toLowerCase(Locale.ROOT);
-            if (name.contains("day") && name.contains("time")) {
+            if ((name.contains("day") && name.contains("time")) || name.contains("clock")) {
                 method.setAccessible(true);
                 return method;
             }
@@ -138,9 +213,11 @@ public final class RealtimeWorldTime {
     }
 
     private static Method findSetter(Class<?> type) {
-        Method exact = findOneArgMethod(type, "setDayTime");
-        if (exact != null && acceptsLongLike(exact.getParameterTypes()[0])) {
-            return exact;
+        for (String name : new String[] {"setDayTime", "setGameTime", "setTimeOfDay", "setClockTime"}) {
+            Method exact = findOneArgMethod(type, name);
+            if (exact != null && acceptsLongLike(exact.getParameterTypes()[0])) {
+                return exact;
+            }
         }
 
         for (Method method : type.getMethods()) {
@@ -148,7 +225,7 @@ public final class RealtimeWorldTime {
                 continue;
             }
             String name = method.getName().toLowerCase(Locale.ROOT);
-            if (name.startsWith("set") && name.contains("day") && name.contains("time")) {
+            if (name.startsWith("set") && ((name.contains("day") && name.contains("time")) || name.contains("clock"))) {
                 method.setAccessible(true);
                 return method;
             }

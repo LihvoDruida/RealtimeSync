@@ -30,12 +30,7 @@ public final class RealtimeGameRules {
     }
 
     public boolean disableDaylightCycle(ServerLevel level, MinecraftServer server) {
-        if (setDaylightCycle(level, server, false)) {
-            return true;
-        }
-
-        warnMissingRuleOnce();
-        return false;
+        return setDaylightCycle(level, server, false);
     }
 
     public boolean disableDaylightCycle(MinecraftServer server) {
@@ -43,11 +38,6 @@ public final class RealtimeGameRules {
         for (ServerLevel level : server.getAllLevels()) {
             appliedToAnyLevel |= setDaylightCycle(level, server, false);
         }
-
-        if (!appliedToAnyLevel) {
-            warnMissingRuleOnce();
-        }
-
         return appliedToAnyLevel;
     }
 

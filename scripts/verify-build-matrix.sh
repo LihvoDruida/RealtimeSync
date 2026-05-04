@@ -68,7 +68,7 @@ if grep -R "\.getGameRules()" common fabric forge neoforge -n; then
   fail "Direct GameRules API calls are not allowed; use RealtimeWorldAccess.gameRules reflection helper"
 fi
 
-if grep -R "performPrefixedCommand\|gamerule doDaylightCycle\|gamerule minecraft:advance_time" common fabric forge neoforge -n; then
+if grep -R "gamerule doDaylightCycle\|gamerule minecraft:advance_time" common fabric forge neoforge -n; then
   fail "Sources must not change daylight gamerules through commands"
 fi
 
@@ -76,6 +76,7 @@ grep -R "DO_DAYLIGHT_CYCLE" common/src/main/java >/dev/null || fail "Common runt
 grep -R "ADVANCE_TIME" common/src/main/java >/dev/null || fail "Common runtime must try the 1.21.11/26.x daylight gamerule key ADVANCE_TIME"
 grep -R "RealtimeWorldTime.readDayTime" common/src/main/java >/dev/null || fail "Runtime must use RealtimeWorldTime for day-time reads"
 grep -R "RealtimeWorldTime.setDayTime" common/src/main/java >/dev/null || fail "Runtime must use RealtimeWorldTime for day-time writes"
+grep -R "time of " common/src/main/java/com/realtime/common/RealtimeWorldTime.java >/dev/null || fail "26.1.x fallback must use World Clock commands when direct time APIs are unavailable"
 grep -R "RealtimeServerState.tickCount" common/src/main/java >/dev/null || fail "Runtime must de-duplicate per-level tick events through RealtimeServerState"
 
 if grep -R "ServerWorldEvents" fabric/src/main/java quilt/src/main/java -n 2>/dev/null; then
