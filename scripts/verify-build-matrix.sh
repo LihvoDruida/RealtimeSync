@@ -106,6 +106,7 @@ if grep -q "buildAllLoaders" .github/workflows/package.yml; then
   fail "Workflow must not build all loaders inside one matrix job; use mc_profile x loader isolation"
 fi
 python3 -m py_compile scripts/validate-jar-metadata.py
+python3 scripts/validate-build-profiles.py
 
 # Minecraft 26.1.x profile guardrails.
 for profile in 26.1 26.1.1 26.1.2; do
@@ -143,6 +144,10 @@ fi
 grep -q "throw new GradleException" build.gradle || fail "Missing mcProfile must fail instead of silently falling back to gradle.properties"
 if grep -nE '^neoforge_version=.*\+$' gradle.properties README.md VERSIONING.md buildProfiles/*.properties; then
   fail "NeoForge versions must be exact in active profiles, fallback config and docs"
+fi
+
+if grep -nE '^fabric_version=0\.\+$' gradle.properties buildProfiles/*.properties; then
+  fail "Fabric API versions must be exact per profile; dynamic 0.+ makes releases non-reproducible"
 fi
 
 grep -q "final class RealtimeController" common/src/main/java/com/realtime/common/RealtimeController.java || fail "Common runtime controller is missing"

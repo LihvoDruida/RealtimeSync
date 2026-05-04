@@ -64,7 +64,7 @@ Each profile controls:
 Fabric API uses:
 
 ```properties
-fabric_version=0.+
+fabric_version=0.128.2+1.21.5
 ```
 
 The Gradle build rejects Fabric API candidates that do not end with the selected Minecraft version suffix. For example, the `1.21.11` profile only accepts Fabric API versions ending in:
@@ -219,6 +219,24 @@ Current pinned profile values:
 
 | Profile | Java | Fabric API | Forge | NeoForge |
 | --- | --- | --- | --- | --- |
-| `26.1` | 25 | `0.144.3+26.1` | `62.0.9` | `26.1.0.1-beta` |
-| `26.1.1` | 25 | `0.145.4+26.1.1` | `63.0.2` | `26.1.1.5-beta` |
-| `26.1.2` | 25 | `0.146.1+26.1.2` | `64.0.7` | `26.1.2.36-beta` |
+| `26.1` | 25 | `0.145.1+26.1` | `62.0.9` | `26.1.0.19-beta` |
+| `26.1.1` | 25 | `0.145.4+26.1.1` | `63.0.2` | `26.1.1.15-beta` |
+| `26.1.2` | 25 | `0.148.0+26.1.2` | `64.0.7` | `26.1.2.36-beta` |
+
+
+## Verified dependency profiles
+
+Active `buildProfiles/*.properties` are dependency-locked. Run:
+
+```bash
+python3 scripts/validate-build-profiles.py
+bash scripts/verify-build-matrix.sh
+```
+
+Important rules:
+
+- Fabric API is pinned per Minecraft profile instead of `0.+` to avoid non-reproducible releases.
+- Forge `1.21.2` is intentionally disabled because the active Forge downloads list does not provide a normal Forge artifact for that Minecraft version.
+- Forge `1.21.10` is pinned to `60.1.0` instead of latest `60.1.9`, because `60.1.9` can fail in ForgeGradle Mavenizer on GitHub-hosted runners.
+- Minecraft `26.1.x` profiles use Java 25 and exact Fabric/Forge/NeoForge artifacts.
+

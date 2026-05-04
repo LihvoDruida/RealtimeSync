@@ -218,16 +218,16 @@ enable_forge=true
 enable_neoforge=true
 
 loader_version=0.18.4
-fabric_version=0.+
+fabric_version=0.128.2+1.21.5
 
 forge_version=61.1.5
 forge_loader_version=[61,)
 
-neoforge_version=21.11.0-beta
+neoforge_version=21.5.95
 neoforge_loader_version=[21.11,)
 ```
 
-Fabric API is resolved dynamically but filtered so Gradle only accepts Fabric API builds whose version ends with the selected Minecraft version, for example `+1.21.11` for Minecraft `1.21.11`.
+Fabric API is pinned to an exact artifact per profile and still checked by Gradle so the version suffix must match the selected Minecraft version, for example `+1.21.11` for Minecraft `1.21.11`.
 
 ## GitHub Actions release flow
 
@@ -327,6 +327,24 @@ Current pinned profile values:
 
 | Profile | Java | Fabric API | Forge | NeoForge |
 | --- | --- | --- | --- | --- |
-| `26.1` | 25 | `0.144.3+26.1` | `62.0.9` | `26.1.0.1-beta` |
-| `26.1.1` | 25 | `0.145.4+26.1.1` | `63.0.2` | `26.1.1.5-beta` |
-| `26.1.2` | 25 | `0.146.1+26.1.2` | `64.0.7` | `26.1.2.36-beta` |
+| `26.1` | 25 | `0.145.1+26.1` | `62.0.9` | `26.1.0.19-beta` |
+| `26.1.1` | 25 | `0.145.4+26.1.1` | `63.0.2` | `26.1.1.15-beta` |
+| `26.1.2` | 25 | `0.148.0+26.1.2` | `64.0.7` | `26.1.2.36-beta` |
+
+
+## Verified dependency profiles
+
+Active `buildProfiles/*.properties` are dependency-locked. Run:
+
+```bash
+python3 scripts/validate-build-profiles.py
+bash scripts/verify-build-matrix.sh
+```
+
+Important rules:
+
+- Fabric API is pinned per Minecraft profile instead of `0.+` to avoid non-reproducible releases.
+- Forge `1.21.2` is intentionally disabled because the active Forge downloads list does not provide a normal Forge artifact for that Minecraft version.
+- Forge `1.21.10` is pinned to `60.1.0` instead of latest `60.1.9`, because `60.1.9` can fail in ForgeGradle Mavenizer on GitHub-hosted runners.
+- Minecraft `26.1.x` profiles use Java 25 and exact Fabric/Forge/NeoForge artifacts.
+
