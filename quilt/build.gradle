@@ -8,7 +8,7 @@ if (!rootProject.ext.isLoaderEnabled('quilt')) {
     return
 }
 
-apply plugin: 'fabric-loom'
+apply plugin: 'net.fabricmc.fabric-loom-remap'
 
 base {
     archivesName = "${project.archives_base_name}-quilt-${project.minecraft_version}"
