@@ -7,11 +7,10 @@ import com.realtime.common.RealtimeLog;
 import com.realtime.common.RealtimeMath;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.Level;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.level.LevelEvent;
 import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.loading.FMLPaths;
 import org.apache.logging.log4j.LogManager;
@@ -42,12 +41,12 @@ public final class RealtimeForge {
         legacyConfigPath = configDir.resolve("realtime.toml");
         reloadConfig(true);
 
-        MinecraftForge.EVENT_BUS.register(this);
+        MinecraftForge.EVENT_BUS.addListener(this::onLevelLoad);
+        MinecraftForge.EVENT_BUS.addListener(this::onLevelTick);
 
         LOGGER.info("{} loaded for Forge. Config: {}", RealtimeConstants.MOD_NAME, configPath.toAbsolutePath());
     }
 
-    @SubscribeEvent
     public void onLevelLoad(LevelEvent.Load event) {
         if (!(event.getLevel() instanceof ServerLevel level)) {
             return;
@@ -67,10 +66,17 @@ public final class RealtimeForge {
         syncServerTime(server);
     }
 
-    @SubscribeEvent
-    public void onServerTick(TickEvent.ServerTickEvent.Post event) {
+    public void onLevelTick(TickEvent.LevelTickEvent.Post event) {
+        if (!(event.getLevel() instanceof ServerLevel level)) {
+            return;
+        }
 
-        MinecraftServer server = event.getServer();
+        // Run once per server tick instead of once per loaded dimension.
+        if (!level.dimension().equals(Level.OVERWORLD)) {
+            return;
+        }
+
+        MinecraftServer server = level.getServer();
         if (server != null) {
             onServerTick(server);
         }
@@ -135,10 +141,12 @@ public final class RealtimeForge {
     }
 
     private void disableDaylightCycle(ServerLevel level, MinecraftServer server) {
-        GameRules.BooleanValue rule = level.getGameRules().getRule(GameRules.RULE_DAYLIGHT);
-        if (rule.get()) {
-            rule.set(false, server);
-        }
+        // Avoid direct GameRules imports: Mojang mappings moved this class/package in newer 1.21.x lines.
+        // The command API is stable across the targeted 1.21 profiles and changes the same doDaylightCycle rule.
+        server.getCommands().performPrefixedCommand(
+                server.createCommandSourceStack(),
+                "gamerule doDaylightCycle false"
+        );
     }
 
     private void checkConfigReload() {

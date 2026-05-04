@@ -7,7 +7,6 @@ import com.realtime.common.RealtimeLog;
 import com.realtime.common.RealtimeMath;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.Level;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.loading.FMLPaths;
@@ -142,10 +141,12 @@ public final class RealtimeNeoForge {
     }
 
     private void disableDaylightCycle(ServerLevel level, MinecraftServer server) {
-        GameRules.BooleanValue rule = level.getGameRules().getRule(GameRules.RULE_DAYLIGHT);
-        if (rule.get()) {
-            rule.set(false, server);
-        }
+        // Avoid direct GameRules imports: Mojang mappings moved this class/package in newer 1.21.x lines.
+        // The command API is stable across the targeted 1.21 profiles and changes the same doDaylightCycle rule.
+        server.getCommands().performPrefixedCommand(
+                server.createCommandSourceStack(),
+                "gamerule doDaylightCycle false"
+        );
     }
 
     private void checkConfigReload() {

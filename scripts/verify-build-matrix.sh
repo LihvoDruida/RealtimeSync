@@ -33,6 +33,10 @@ for profile in "${expected_profiles[@]}"; do
   grep -q "^enable_forge=" "${file}" || fail "Profile ${file} missing enable_forge"
   grep -q "^enable_neoforge=" "${file}" || fail "Profile ${file} missing enable_neoforge"
   grep -q "mc_profile: '${profile}'" .github/workflows/package.yml || fail "Workflow matrix missing ${profile}"
+
+  if grep -qE '^neoforge_version=.*\+$' "${file}"; then
+    fail "Profile ${file} uses dynamic NeoForge version; ModDev/NeoForm needs an exact version"
+  fi
 done
 
 grep -q "gradle-9.3.0-bin.zip" gradle/wrapper/gradle-wrapper.properties || fail "Gradle wrapper must be 9.3.0 for ForgeGradle 7"
@@ -55,6 +59,18 @@ grep -q "workingDir.convention" forge/build.gradle || fail "Forge module must us
 grep -q "implementation minecraft.dependency" forge/build.gradle || fail "Forge module must use ForgeGradle 7 minecraft.dependency(...)"
 grep -q "maven fg.forgeMaven" forge/build.gradle || fail "Forge module must add ForgeGradle 7 Forge Maven helper"
 grep -q "maven fg.minecraftLibsMaven" forge/build.gradle || fail "Forge module must add ForgeGradle 7 Minecraft libs Maven helper"
+
+
+if grep -R "import net.minecraft.world.level.GameRules" fabric forge neoforge -n; then
+  fail "Direct GameRules imports are not compatible across all 1.21.x mappings"
+fi
+
+if grep -R "net.minecraftforge.eventbus.api.SubscribeEvent\|@SubscribeEvent\|MinecraftForge.EVENT_BUS.register" forge/src/main/java -n; then
+  fail "Forge source must not use old annotation event-bus registration on current 1.21.x Forge"
+fi
+
+grep -q "MinecraftForge.EVENT_BUS.addListener(this::onLevelTick)" forge/src/main/java/com/realtime/forge/RealtimeForge.java || fail "Forge source must register typed listeners"
+grep -q "TickEvent.LevelTickEvent.Post" forge/src/main/java/com/realtime/forge/RealtimeForge.java || fail "Forge source must tick through LevelTickEvent.Post"
 
 bash -n scripts/build-all-profiles.sh
 

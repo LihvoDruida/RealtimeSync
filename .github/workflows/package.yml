@@ -162,6 +162,10 @@ jobs:
           echo "Selected profile ${PROFILE}: Minecraft ${MC_VERSION}, Java ${JAVA_VERSION}"
           echo "Loaders: fabric=${ENABLE_FABRIC}, quilt=${ENABLE_QUILT}, forge=${ENABLE_FORGE}, neoforge=${ENABLE_NEOFORGE}"
 
+      - name: Verify build matrix guardrails
+        shell: bash
+        run: bash scripts/verify-build-matrix.sh
+
       - name: Print Gradle profile
         shell: bash
         run: bash ./gradlew -PmcProfile=${{ steps.versions.outputs.mc_profile }} printBuildProfile --stacktrace

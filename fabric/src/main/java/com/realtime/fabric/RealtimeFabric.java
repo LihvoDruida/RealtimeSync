@@ -11,7 +11,6 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.GameRules;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -117,10 +116,12 @@ public final class RealtimeFabric implements ModInitializer {
     }
 
     private void disableDaylightCycle(ServerLevel level, MinecraftServer server) {
-        GameRules.BooleanValue rule = level.getGameRules().getRule(GameRules.RULE_DAYLIGHT);
-        if (rule.get()) {
-            rule.set(false, server);
-        }
+        // Avoid direct GameRules imports: Mojang mappings moved this class/package in newer 1.21.x lines.
+        // The command API is stable across the targeted 1.21 profiles and changes the same doDaylightCycle rule.
+        server.getCommands().performPrefixedCommand(
+                server.createCommandSourceStack(),
+                "gamerule doDaylightCycle false"
+        );
     }
 
     private void checkConfigReload() {

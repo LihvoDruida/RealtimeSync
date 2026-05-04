@@ -219,3 +219,8 @@ Requires Java 21 and the bundled Gradle Wrapper 9.3.0 because Fabric Loom Remap 
 - A disabled loader in `buildProfiles/<version>.properties` is skipped before its loader-specific dependencies are resolved. This prevents placeholder values such as `forge_version=unsupported` from breaking profile tasks.
 - ForgeGradle 7 run configs must use `workingDir.convention(...)` or `workingDir = ...`; the old `workingDirectory(...)` MDK syntax fails during project configuration.
 - ForgeGradle 7 Forge dependencies use `implementation minecraft.dependency("net.minecraftforge:forge:${minecraft_version}-${forge_version}")`; do not use the old ForgeGradle 6 `minecraft "..."` dependency notation.
+
+
+### Build compatibility notes
+
+The 1.21.x matrix intentionally avoids direct `GameRules` imports in loader entrypoints because Mojang mappings are not stable across every 1.21.x profile. The mod disables `doDaylightCycle` through the server command API instead. Forge also uses typed `MinecraftForge.EVENT_BUS.addListener(...)` callbacks instead of the older `@SubscribeEvent` annotation path, which is not present in the newer ForgeGradle 7 / Forge 58+ compile classpath. NeoForge profile versions are pinned exactly; do not use `21.x.+` with ModDev/NeoForm because it is resolved as a literal userdev artifact in this setup.

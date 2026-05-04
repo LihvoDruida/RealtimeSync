@@ -132,3 +132,8 @@ The project wrapper is pinned to Gradle 9.3.0. Do not downgrade it while using F
 - ForgeGradle 7 dependencies must use `implementation minecraft.dependency("net.minecraftforge:forge:${minecraft_version}-${forge_version}")` instead of the older `minecraft "..."` configuration notation.
 - Use `net.fabricmc.fabric-loom-remap` for the `1.21` to `1.21.11` Fabric/Quilt-compatible builds.
 - Keep `enable_forge=false` for profiles without a real Forge artifact, for example `1.21.2`; do not use placeholder versions like `unsupported` in an enabled Forge profile.
+
+
+### Build compatibility notes
+
+The 1.21.x matrix intentionally avoids direct `GameRules` imports in loader entrypoints because Mojang mappings are not stable across every 1.21.x profile. The mod disables `doDaylightCycle` through the server command API instead. Forge also uses typed `MinecraftForge.EVENT_BUS.addListener(...)` callbacks instead of the older `@SubscribeEvent` annotation path, which is not present in the newer ForgeGradle 7 / Forge 58+ compile classpath. NeoForge profile versions are pinned exactly; do not use `21.x.+` with ModDev/NeoForm because it is resolved as a literal userdev artifact in this setup.
