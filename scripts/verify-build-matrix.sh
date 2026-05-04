@@ -32,7 +32,7 @@ for profile in "${expected_profiles[@]}"; do
   grep -q "^enable_quilt=" "${file}" || fail "Profile ${file} missing enable_quilt"
   grep -q "^enable_forge=" "${file}" || fail "Profile ${file} missing enable_forge"
   grep -q "^enable_neoforge=" "${file}" || fail "Profile ${file} missing enable_neoforge"
-  grep -q "mc_profile: '${profile}'" .github/workflows/package.yml || fail "Workflow matrix missing ${profile}"
+  grep -q -- "- '${profile}'" .github/workflows/package.yml || fail "Workflow matrix missing ${profile}"
 
   if grep -qE '^neoforge_version=.*\+$' "${file}"; then
     fail "Profile ${file} uses dynamic NeoForge version; ModDev/NeoForm needs an exact version"
@@ -80,13 +80,32 @@ if grep -R "event.getLevel()" forge/src/main/java -n; then
   fail "Forge source must not call event.getLevel(); TickEvent.LevelTickEvent.Post does not expose it across the whole 1.21.x range"
 fi
 
+
+# CI package 2 guardrails: matrix is split by Minecraft profile and loader, and jars are validated before upload.
+grep -q "build-loader:" .github/workflows/package.yml || fail "Workflow must have a build-loader matrix job"
+grep -q "loader:" .github/workflows/package.yml || fail "Workflow matrix must include loader axis"
+grep -q -- "- fabric" .github/workflows/package.yml || fail "Workflow loader matrix missing fabric"
+grep -q -- "- quilt" .github/workflows/package.yml || fail "Workflow loader matrix missing quilt"
+grep -q -- "- forge" .github/workflows/package.yml || fail "Workflow loader matrix missing forge"
+grep -q -- "- neoforge" .github/workflows/package.yml || fail "Workflow loader matrix missing neoforge"
+grep -q "validate-jar-metadata.py" .github/workflows/package.yml || fail "Workflow must validate jar metadata before artifact upload"
+grep -q "sha256sum" .github/workflows/package.yml || fail "Workflow must generate sha256 checksums for release artifacts"
+grep -q "metadata.json" .github/workflows/package.yml || fail "Workflow must stage metadata JSON for release artifacts"
+grep -q "pattern: realtime-sync-\*-jar" .github/workflows/package.yml || fail "GitHub release job must download all per-loader artifacts by pattern"
+grep -q "curseforge-publish:" .github/workflows/package.yml || fail "Workflow must have isolated CurseForge publish matrix job"
+grep -q "continue-on-error: true" .github/workflows/package.yml || fail "CurseForge publish job must not block completed loader builds"
+grep -q "fail-mode: warn" .github/workflows/package.yml || fail "mc-publish must warn instead of failing the workflow for external publish errors"
+if grep -q "buildAllLoaders" .github/workflows/package.yml; then
+  fail "Workflow must not build all loaders inside one matrix job; use mc_profile x loader isolation"
+fi
+python3 -m py_compile scripts/validate-jar-metadata.py
+bash -n scripts/ci-read-profile.sh
+
 grep -q "ServerLifecycleHooks.getCurrentServer" forge/src/main/java/com/realtime/forge/RealtimeForge.java || fail "Forge source must use ServerLifecycleHooks-based ticking for cross-1.21.x compatibility"
 grep -q "ScheduledExecutorService" forge/src/main/java/com/realtime/forge/RealtimeForge.java || fail "Forge source must schedule safe server-thread ticks without Forge event-bus APIs"
 
 
-if [[ "$(grep -c "game-version-filter: none" .github/workflows/package.yml)" -lt 4 ]]; then
-  fail "All CurseForge mc-publish steps must use game-version-filter: none to avoid Mojang manifest fetch failures during publish"
-fi
+grep -q "game-version-filter: none" .github/workflows/package.yml || fail "CurseForge mc-publish must use game-version-filter: none to avoid Mojang manifest fetch failures during publish"
 
 if grep -n "game-version-filter: releases" .github/workflows/package.yml; then
   fail "CurseForge publish must not use game-version-filter: releases; it fetches Mojang version_manifest_v2.json during publish"

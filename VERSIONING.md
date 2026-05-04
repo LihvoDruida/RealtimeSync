@@ -138,6 +138,27 @@ The project wrapper is pinned to Gradle 9.3.0. Do not downgrade it while using F
 
 The 1.21.x matrix intentionally avoids direct `GameRules` imports in loader entrypoints because Mojang mappings and gamerule identifiers are not stable across every 1.21.x profile. The mod also does not call `/gamerule doDaylightCycle false`: Minecraft 1.21.11 renamed gamerules to namespaced IDs such as `minecraft:advance_time`, while older profiles still use `doDaylightCycle`. Instead, the loader entrypoints set the boolean gamerule through reflection and try the known runtime key names (`DO_DAYLIGHT_CYCLE`, `ADVANCE_TIME`, `RULE_DAYLIGHT`, `RULE_ADVANCE_TIME`) plus the stable intermediary field (`field_19396`). Forge avoids the Forge event bus entirely and uses `ServerLifecycleHooks` with a safe server-thread scheduler because Forge 1.21.6+ exposes EventBus 7 migration helpers instead of the older APIs. NeoForge profile versions are pinned exactly; do not use `21.x.+` with ModDev/NeoForm because it is resolved as a literal userdev artifact in this setup.
 
+
+## CI matrix and artifact validation
+
+The release workflow uses a real `mc_profile x loader` matrix instead of building every loader inside one job. Each enabled target builds one jar, validates its metadata and uploads three files:
+
+```txt
+<jar>.jar
+<jar>.jar.sha256
+<jar>.jar.metadata.json
+```
+
+`scripts/validate-jar-metadata.py` opens the produced jar and checks that:
+
+- loader metadata exists (`fabric.mod.json`, `META-INF/mods.toml` or `META-INF/neoforge.mods.toml`);
+- Gradle placeholders such as `${version}` were expanded;
+- the mod id is `realtime`;
+- the jar metadata contains the expected mod version and Minecraft version;
+- the common runtime classes and icon are present.
+
+CurseForge publishing is isolated in its own loader/version matrix with `continue-on-error: true` and `fail-mode: warn`. External publish failures should be visible in logs but must not invalidate already-built jars or block other loader uploads.
+
 ## CurseForge publish guardrail
 
 The CurseForge publish steps intentionally set `game-version-filter: none` in `.github/workflows/package.yml`.

@@ -208,17 +208,25 @@ Fabric API is resolved dynamically but filtered so Gradle only accepts Fabric AP
 
 ## GitHub Actions release flow
 
-`.github/workflows/package.yml` builds every profile in the 1.21–1.21.11 range.
+`.github/workflows/package.yml` builds the 1.21–1.21.11 range with a split matrix:
 
-For each profile it:
+```txt
+mc_profile x loader
+```
+
+That means Fabric, Quilt, Forge and NeoForge are isolated per Minecraft version. A broken loader no longer hides which target failed, and disabled targets such as Forge `1.21.2` are skipped before loader-specific dependencies are resolved.
+
+For each enabled matrix target the workflow:
 
 1. Resolves the mod version from the Git tag.
-2. Reads `buildProfiles/<mcProfile>.properties`.
-3. Builds all enabled loader artifacts.
-4. Verifies expected jars.
-5. Uploads artifacts.
-6. Publishes release files on tag builds.
-7. Publishes Fabric, Quilt, Forge and NeoForge files to CurseForge when secrets are configured.
+2. Reads `buildProfiles/<mcProfile>.properties` and the current loader switch.
+3. Builds only the selected loader jar.
+4. Validates jar metadata inside the produced artifact.
+5. Uploads the jar, a `.sha256` checksum and a `.metadata.json` file.
+6. Collects all loader artifacts into the GitHub Release on tag builds.
+7. Publishes each loader/version pair to CurseForge in an isolated publish matrix.
+
+CurseForge publish uses `fail-mode: warn` and a separate matrix job, so a temporary CurseForge/Mojang-side publish failure does not block other built loader artifacts.
 
 Required secrets for CurseForge publication:
 

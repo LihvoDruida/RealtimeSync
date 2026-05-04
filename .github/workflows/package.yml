@@ -9,41 +9,62 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: realtime-sync-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
   CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
 
 jobs:
-  build:
+  validate:
+    name: Validate build matrix and scripts
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore Gradle wrapper executable bit
+        shell: bash
+        run: |
+          chmod +x ./gradlew
+          git update-index --chmod=+x ./gradlew || true
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Verify build matrix guardrails
+        shell: bash
+        run: bash scripts/verify-build-matrix.sh
+
+  build-loader:
+    name: Build ${{ matrix.loader }} for Minecraft ${{ matrix.mc_profile }}
+    runs-on: ubuntu-latest
+    needs: validate
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - mc_profile: '1.21'
-            java_version: '21'
-          - mc_profile: '1.21.1'
-            java_version: '21'
-          - mc_profile: '1.21.2'
-            java_version: '21'
-          - mc_profile: '1.21.3'
-            java_version: '21'
-          - mc_profile: '1.21.4'
-            java_version: '21'
-          - mc_profile: '1.21.5'
-            java_version: '21'
-          - mc_profile: '1.21.6'
-            java_version: '21'
-          - mc_profile: '1.21.7'
-            java_version: '21'
-          - mc_profile: '1.21.8'
-            java_version: '21'
-          - mc_profile: '1.21.9'
-            java_version: '21'
-          - mc_profile: '1.21.10'
-            java_version: '21'
-          - mc_profile: '1.21.11'
-            java_version: '21'
+        mc_profile:
+          - '1.21'
+          - '1.21.1'
+          - '1.21.2'
+          - '1.21.3'
+          - '1.21.4'
+          - '1.21.5'
+          - '1.21.6'
+          - '1.21.7'
+          - '1.21.8'
+          - '1.21.9'
+          - '1.21.10'
+          - '1.21.11'
+        loader:
+          - fabric
+          - quilt
+          - forge
+          - neoforge
 
     steps:
       - name: Checkout
@@ -64,7 +85,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: ${{ matrix.java_version }}
+          java-version: '21'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -97,20 +118,92 @@ jobs:
           echo "Resolved mod version: ${MOD_VERSION}"
           grep '^mod_version=' gradle.properties
 
+      - name: Read selected build profile and loader
+        id: versions
+        shell: bash
+        run: bash scripts/ci-read-profile.sh '${{ matrix.mc_profile }}' '${{ matrix.loader }}'
+
+      - name: Skip disabled loader
+        if: steps.versions.outputs.enabled != 'true'
+        shell: bash
+        run: |
+          echo "Skipping ${{ steps.versions.outputs.loader_title }} for Minecraft ${{ steps.versions.outputs.minecraft_version }} because ${{ steps.versions.outputs.enable_key }}=false."
+
+      - name: Print Gradle profile
+        if: steps.versions.outputs.enabled == 'true'
+        shell: bash
+        run: bash ./gradlew -PmcProfile=${{ steps.versions.outputs.mc_profile }} printBuildProfile --stacktrace
+
+      - name: Build loader jar
+        if: steps.versions.outputs.enabled == 'true'
+        shell: bash
+        run: bash ./gradlew -PmcProfile=${{ steps.versions.outputs.mc_profile }} clean ${{ steps.versions.outputs.gradle_task }} --stacktrace
+
+      - name: Validate jar metadata
+        if: steps.versions.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          python3 scripts/validate-jar-metadata.py \
+            --loader '${{ steps.versions.outputs.loader }}' \
+            --minecraft-version '${{ steps.versions.outputs.minecraft_version }}' \
+            --mod-version '${{ steps.versions.outputs.mod_version }}' \
+            --jar '${{ steps.versions.outputs.jar_path }}'
+
+      - name: Stage release artifact
+        if: steps.versions.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="release-artifacts"
+          rm -rf "${OUT}"
+          mkdir -p "${OUT}"
+
+          cp '${{ steps.versions.outputs.jar_path }}' "${OUT}/"
+          (
+            cd "${OUT}"
+            sha256sum '${{ steps.versions.outputs.jar_name }}' > '${{ steps.versions.outputs.jar_name }}.sha256'
+          )
+
+          cat > "${OUT}/${{ steps.versions.outputs.jar_name }}.metadata.json" <<JSON
+          {
+            "mod": "RealtimeSync",
+            "modVersion": "${{ steps.versions.outputs.mod_version }}",
+            "minecraftVersion": "${{ steps.versions.outputs.minecraft_version }}",
+            "minecraftProfile": "${{ steps.versions.outputs.mc_profile }}",
+            "loader": "${{ steps.versions.outputs.loader }}",
+            "loaderName": "${{ steps.versions.outputs.loader_title }}",
+            "java": "${{ steps.versions.outputs.java_version }}",
+            "jar": "${{ steps.versions.outputs.jar_name }}"
+          }
+          JSON
+
+          find "${OUT}" -maxdepth 1 -type f -print -exec ls -lah {} \;
+
+      - name: Upload loader artifact
+        if: steps.versions.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.versions.outputs.artifact_name }}
+          if-no-files-found: error
+          retention-days: 30
+          path: release-artifacts/*
+
+  github-release:
+    name: Publish GitHub release artifacts
+    runs-on: ubuntu-latest
+    needs: build-loader
+    if: github.ref_type == 'tag'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Generate CHANGELOG.md
-        if: github.ref_type == 'tag'
         uses: orhun/git-cliff-action@v4
         with:
           config: cliff.toml
           args: --latest --strip header --output CHANGELOG.md
-
-      - name: Generate development changelog placeholder
-        if: github.ref_type != 'tag'
-        shell: bash
-        run: |
-          cat > CHANGELOG.md <<'CHANGELOG'
-          Development build from workflow_dispatch.
-          CHANGELOG
 
       - name: Verify Changelog
         shell: bash
@@ -118,198 +211,123 @@ jobs:
           test -s CHANGELOG.md
           cat CHANGELOG.md
 
-      - name: Read selected build profile
-        id: versions
-        shell: bash
-        run: |
-          set -euo pipefail
-          PROFILE="${{ matrix.mc_profile }}"
-          PROFILE_FILE="buildProfiles/${PROFILE}.properties"
-          if [[ ! -s "${PROFILE_FILE}" ]]; then
-            echo "Missing Minecraft build profile: ${PROFILE_FILE}" >&2
-            exit 1
-          fi
-
-          read_profile_prop() {
-            grep "^$1=" "${PROFILE_FILE}" | cut -d'=' -f2-
-          }
-          read_gradle_prop() {
-            grep "^$1=" gradle.properties | cut -d'=' -f2-
-          }
-
-          MC_VERSION="$(read_profile_prop minecraft_version)"
-          MC_LABEL="$(read_profile_prop minecraft_compat_label)"
-          JAVA_VERSION="$(read_profile_prop java_version)"
-          CURSEFORGE_JAVA="$(read_profile_prop curseforge_java_versions)"
-          MOD_VERSION="$(read_gradle_prop mod_version)"
-          ENABLE_FABRIC="$(read_profile_prop enable_fabric)"
-          ENABLE_QUILT="$(read_profile_prop enable_quilt)"
-          ENABLE_FORGE="$(read_profile_prop enable_forge)"
-          ENABLE_NEOFORGE="$(read_profile_prop enable_neoforge)"
-
-          echo "mc_profile=${PROFILE}" >> "$GITHUB_OUTPUT"
-          echo "minecraft_version=${MC_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "minecraft_compat_label=${MC_LABEL}" >> "$GITHUB_OUTPUT"
-          echo "java_version=${JAVA_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "curseforge_java_versions=${CURSEFORGE_JAVA}" >> "$GITHUB_OUTPUT"
-          echo "mod_version=${MOD_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "curseforge_game_versions=${MC_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "enable_fabric=${ENABLE_FABRIC}" >> "$GITHUB_OUTPUT"
-          echo "enable_quilt=${ENABLE_QUILT}" >> "$GITHUB_OUTPUT"
-          echo "enable_forge=${ENABLE_FORGE}" >> "$GITHUB_OUTPUT"
-          echo "enable_neoforge=${ENABLE_NEOFORGE}" >> "$GITHUB_OUTPUT"
-
-          echo "Selected profile ${PROFILE}: Minecraft ${MC_VERSION}, Java ${JAVA_VERSION}"
-          echo "Loaders: fabric=${ENABLE_FABRIC}, quilt=${ENABLE_QUILT}, forge=${ENABLE_FORGE}, neoforge=${ENABLE_NEOFORGE}"
-
-      - name: Verify build matrix guardrails
-        shell: bash
-        run: bash scripts/verify-build-matrix.sh
-
-      - name: Print Gradle profile
-        shell: bash
-        run: bash ./gradlew -PmcProfile=${{ steps.versions.outputs.mc_profile }} printBuildProfile --stacktrace
-
-      - name: Build loader jars for profile
-        shell: bash
-        run: bash ./gradlew -PmcProfile=${{ steps.versions.outputs.mc_profile }} clean buildAllLoaders --stacktrace
-
-      - name: Verify release jars
-        shell: bash
-        run: |
-          set -euo pipefail
-          MC="${{ steps.versions.outputs.minecraft_version }}"
-          MOD="${{ steps.versions.outputs.mod_version }}"
-          test "${MOD}" = "${{ steps.tag_version.outputs.mod_version }}"
-
-          if [[ "${{ steps.versions.outputs.enable_fabric }}" == "true" ]]; then
-            test -f "fabric/build/libs/realtime-sync-fabric-${MC}-${MOD}.jar"
-          fi
-          if [[ "${{ steps.versions.outputs.enable_quilt }}" == "true" ]]; then
-            test -f "quilt/build/libs/realtime-sync-quilt-${MC}-${MOD}.jar"
-          fi
-          if [[ "${{ steps.versions.outputs.enable_forge }}" == "true" ]]; then
-            test -f "forge/build/libs/realtime-sync-forge-${MC}-${MOD}.jar"
-          fi
-          if [[ "${{ steps.versions.outputs.enable_neoforge }}" == "true" ]]; then
-            test -f "neoforge/build/libs/realtime-sync-neoforge-${MC}-${MOD}.jar"
-          fi
-
-          find fabric quilt forge neoforge -path '*/build/libs/*.jar' -print -exec ls -lah {} \;
-
-      - name: Stage enabled release jars
-        shell: bash
-        run: |
-          set -euo pipefail
-          MC="${{ steps.versions.outputs.minecraft_version }}"
-          MOD="${{ steps.versions.outputs.mod_version }}"
-          OUT="release-jars"
-          rm -rf "${OUT}"
-          mkdir -p "${OUT}"
-
-          if [[ "${{ steps.versions.outputs.enable_fabric }}" == "true" ]]; then
-            cp "fabric/build/libs/realtime-sync-fabric-${MC}-${MOD}.jar" "${OUT}/"
-          fi
-          if [[ "${{ steps.versions.outputs.enable_quilt }}" == "true" ]]; then
-            cp "quilt/build/libs/realtime-sync-quilt-${MC}-${MOD}.jar" "${OUT}/"
-          fi
-          if [[ "${{ steps.versions.outputs.enable_forge }}" == "true" ]]; then
-            cp "forge/build/libs/realtime-sync-forge-${MC}-${MOD}.jar" "${OUT}/"
-          fi
-          if [[ "${{ steps.versions.outputs.enable_neoforge }}" == "true" ]]; then
-            cp "neoforge/build/libs/realtime-sync-neoforge-${MC}-${MOD}.jar" "${OUT}/"
-          fi
-
-          test -n "$(find "${OUT}" -maxdepth 1 -name '*.jar' -print -quit)"
-          find "${OUT}" -maxdepth 1 -name '*.jar' -print -exec ls -lah {} \;
-
-      - name: Upload loader jars
-        uses: actions/upload-artifact@v4
+      - name: Download all loader artifacts
+        uses: actions/download-artifact@v4
         with:
-          name: RealtimeSync-${{ steps.versions.outputs.mod_version }}-mc${{ steps.versions.outputs.minecraft_compat_label }}-loader-jars
-          if-no-files-found: error
-          path: release-jars/*.jar
+          pattern: realtime-sync-*-jar
+          path: release-jars
+          merge-multiple: true
+
+      - name: List release files
+        shell: bash
+        run: |
+          test -n "$(find release-jars -maxdepth 1 -type f -name '*.jar' -print -quit)"
+          find release-jars -maxdepth 1 -type f -print | sort
 
       - name: Publish GitHub Release files
-        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
           fail_on_unmatched_files: false
-          files: release-jars/*.jar
+          files: release-jars/*
           body_path: CHANGELOG.md
 
-      - name: Publish Fabric file to CurseForge
-        if: github.ref_type == 'tag' && env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != '' && steps.versions.outputs.enable_fabric == 'true'
-        uses: Kira-NT/mc-publish@v3.3
-        with:
-          curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
-          curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
-          files: fabric/build/libs/realtime-sync-fabric-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
-          name: RealtimeSync ${{ steps.versions.outputs.mod_version }} [Minecraft ${{ steps.versions.outputs.minecraft_compat_label }}] Fabric
-          version: fabric-${{ steps.versions.outputs.mod_version }}+mc${{ steps.versions.outputs.minecraft_compat_label }}
-          version-type: release
-          changelog-file: CHANGELOG.md
-          loaders: |
-            fabric
-          game-versions: |
-            ${{ steps.versions.outputs.curseforge_game_versions }}
-          game-version-filter: none
-          java: |
-            ${{ steps.versions.outputs.curseforge_java_versions }}
+  curseforge-publish:
+    name: Publish ${{ matrix.loader }} for Minecraft ${{ matrix.mc_profile }} to CurseForge
+    runs-on: ubuntu-latest
+    needs: build-loader
+    if: github.ref_type == 'tag'
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        mc_profile:
+          - '1.21'
+          - '1.21.1'
+          - '1.21.2'
+          - '1.21.3'
+          - '1.21.4'
+          - '1.21.5'
+          - '1.21.6'
+          - '1.21.7'
+          - '1.21.8'
+          - '1.21.9'
+          - '1.21.10'
+          - '1.21.11'
+        loader:
+          - fabric
+          - quilt
+          - forge
+          - neoforge
 
-      - name: Publish Quilt file to CurseForge
-        if: github.ref_type == 'tag' && env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != '' && steps.versions.outputs.enable_quilt == 'true'
-        uses: Kira-NT/mc-publish@v3.3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
-          curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
-          files: quilt/build/libs/realtime-sync-quilt-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
-          name: RealtimeSync ${{ steps.versions.outputs.mod_version }} [Minecraft ${{ steps.versions.outputs.minecraft_compat_label }}] Quilt
-          version: quilt-${{ steps.versions.outputs.mod_version }}+mc${{ steps.versions.outputs.minecraft_compat_label }}
-          version-type: release
-          changelog-file: CHANGELOG.md
-          loaders: |
-            quilt
-          game-versions: |
-            ${{ steps.versions.outputs.curseforge_game_versions }}
-          game-version-filter: none
-          java: |
-            ${{ steps.versions.outputs.curseforge_java_versions }}
+          fetch-depth: 0
 
-      - name: Publish Forge file to CurseForge
-        if: github.ref_type == 'tag' && env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != '' && steps.versions.outputs.enable_forge == 'true'
-        uses: Kira-NT/mc-publish@v3.3
-        with:
-          curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
-          curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
-          files: forge/build/libs/realtime-sync-forge-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
-          name: RealtimeSync ${{ steps.versions.outputs.mod_version }} [Minecraft ${{ steps.versions.outputs.minecraft_compat_label }}] Forge
-          version: forge-${{ steps.versions.outputs.mod_version }}+mc${{ steps.versions.outputs.minecraft_compat_label }}
-          version-type: release
-          changelog-file: CHANGELOG.md
-          loaders: |
-            forge
-          game-versions: |
-            ${{ steps.versions.outputs.curseforge_game_versions }}
-          game-version-filter: none
-          java: |
-            ${{ steps.versions.outputs.curseforge_java_versions }}
+      - name: Resolve release version from tag
+        id: tag_version
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          if [[ "${TAG}" != v* ]]; then
+            echo "This workflow tag must use v* format. Current tag: ${TAG}" >&2
+            exit 1
+          fi
+          MOD_VERSION="${TAG#v}"
+          sed -i "s/^mod_version=.*/mod_version=${MOD_VERSION}/" gradle.properties
+          echo "mod_version=${MOD_VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Publish NeoForge file to CurseForge
-        if: github.ref_type == 'tag' && env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != '' && steps.versions.outputs.enable_neoforge == 'true'
+      - name: Read selected build profile and loader
+        id: versions
+        shell: bash
+        run: bash scripts/ci-read-profile.sh '${{ matrix.mc_profile }}' '${{ matrix.loader }}'
+
+      - name: Skip disabled loader
+        if: steps.versions.outputs.enabled != 'true'
+        shell: bash
+        run: |
+          echo "Skipping CurseForge publish for disabled loader: ${{ steps.versions.outputs.loader_title }} Minecraft ${{ steps.versions.outputs.minecraft_version }}."
+
+      - name: Download loader artifact
+        if: steps.versions.outputs.enabled == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.versions.outputs.artifact_name }}
+          path: publish-artifact
+
+      - name: Generate CHANGELOG.md
+        if: steps.versions.outputs.enabled == 'true'
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --latest --strip header --output CHANGELOG.md
+
+      - name: Publish loader file to CurseForge
+        if: steps.versions.outputs.enabled == 'true' && env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != ''
         uses: Kira-NT/mc-publish@v3.3
         with:
           curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
           curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
-          files: neoforge/build/libs/realtime-sync-neoforge-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
-          name: RealtimeSync ${{ steps.versions.outputs.mod_version }} [Minecraft ${{ steps.versions.outputs.minecraft_compat_label }}] NeoForge
-          version: neoforge-${{ steps.versions.outputs.mod_version }}+mc${{ steps.versions.outputs.minecraft_compat_label }}
+          files: publish-artifact/${{ steps.versions.outputs.jar_name }}
+          name: RealtimeSync ${{ steps.versions.outputs.mod_version }} [Minecraft ${{ steps.versions.outputs.minecraft_compat_label }}] ${{ steps.versions.outputs.loader_title }}
+          version: ${{ steps.versions.outputs.loader }}-${{ steps.versions.outputs.mod_version }}+mc${{ steps.versions.outputs.minecraft_compat_label }}
           version-type: release
           changelog-file: CHANGELOG.md
           loaders: |
-            neoforge
+            ${{ steps.versions.outputs.curseforge_loader }}
           game-versions: |
             ${{ steps.versions.outputs.curseforge_game_versions }}
           game-version-filter: none
           java: |
             ${{ steps.versions.outputs.curseforge_java_versions }}
+          retry-attempts: 3
+          retry-delay: 15000
+          fail-mode: warn
+
+      - name: CurseForge credentials not configured
+        if: steps.versions.outputs.enabled == 'true' && (env.CURSEFORGE_PROJECT_ID == '' || env.CURSEFORGE_TOKEN == '')
+        shell: bash
+        run: |
+          echo "Skipping CurseForge publish because CURSEFORGE_PROJECT_ID or CURSEFORGE_TOKEN is not configured."
