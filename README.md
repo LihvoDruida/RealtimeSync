@@ -205,3 +205,8 @@ CURSEFORGE_TOKEN
 ## License
 
 This project is licensed under **CC0-1.0**, according to the included [`LICENSE`](LICENSE) file and loader metadata.
+
+
+## Build requirements
+
+Requires Java 21 and Gradle Wrapper 8.14.3 or newer because Fabric Loom 1.11.x requires Gradle 8.14+. Use `./gradlew` from this repository.

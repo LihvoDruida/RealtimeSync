@@ -111,3 +111,8 @@ Forge 1.21.2 is disabled because the normal Forge 1.21.x release line does not p
 ## About Minecraft 26.x+
 
 A `26.1.2.properties.example` file is included only as a starting point for the new version format. It is not enabled in the release matrix. Enable it only after checking current loader support and compiling all enabled targets.
+
+
+## Build tool compatibility
+
+The project wrapper is pinned to Gradle 8.14.3. Do not downgrade it while using Fabric Loom 1.11.x, because Loom requires Gradle 8.14 or newer.

@@ -193,27 +193,45 @@ jobs:
 
           find fabric quilt forge neoforge -path '*/build/libs/*.jar' -print -exec ls -lah {} \;
 
+      - name: Stage enabled release jars
+        shell: bash
+        run: |
+          set -euo pipefail
+          MC="${{ steps.versions.outputs.minecraft_version }}"
+          MOD="${{ steps.versions.outputs.mod_version }}"
+          OUT="release-jars"
+          rm -rf "${OUT}"
+          mkdir -p "${OUT}"
+
+          if [[ "${{ steps.versions.outputs.enable_fabric }}" == "true" ]]; then
+            cp "fabric/build/libs/realtime-sync-fabric-${MC}-${MOD}.jar" "${OUT}/"
+          fi
+          if [[ "${{ steps.versions.outputs.enable_quilt }}" == "true" ]]; then
+            cp "quilt/build/libs/realtime-sync-quilt-${MC}-${MOD}.jar" "${OUT}/"
+          fi
+          if [[ "${{ steps.versions.outputs.enable_forge }}" == "true" ]]; then
+            cp "forge/build/libs/realtime-sync-forge-${MC}-${MOD}.jar" "${OUT}/"
+          fi
+          if [[ "${{ steps.versions.outputs.enable_neoforge }}" == "true" ]]; then
+            cp "neoforge/build/libs/realtime-sync-neoforge-${MC}-${MOD}.jar" "${OUT}/"
+          fi
+
+          test -n "$(find "${OUT}" -maxdepth 1 -name '*.jar' -print -quit)"
+          find "${OUT}" -maxdepth 1 -name '*.jar' -print -exec ls -lah {} \;
+
       - name: Upload loader jars
         uses: actions/upload-artifact@v4
         with:
           name: RealtimeSync-${{ steps.versions.outputs.mod_version }}-mc${{ steps.versions.outputs.minecraft_compat_label }}-loader-jars
           if-no-files-found: error
-          path: |
-            fabric/build/libs/realtime-sync-fabric-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
-            quilt/build/libs/realtime-sync-quilt-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
-            forge/build/libs/realtime-sync-forge-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
-            neoforge/build/libs/realtime-sync-neoforge-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
+          path: release-jars/*.jar
 
       - name: Publish GitHub Release files
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
           fail_on_unmatched_files: false
-          files: |
-            fabric/build/libs/realtime-sync-fabric-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
-            quilt/build/libs/realtime-sync-quilt-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
-            forge/build/libs/realtime-sync-forge-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
-            neoforge/build/libs/realtime-sync-neoforge-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
+          files: release-jars/*.jar
           body_path: CHANGELOG.md
 
       - name: Publish Fabric file to CurseForge
