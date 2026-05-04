@@ -128,5 +128,7 @@ The project wrapper is pinned to Gradle 9.3.0. Do not downgrade it while using F
 ## Build toolchain guardrails
 
 - Use Gradle Wrapper `9.3.0` or newer with ForgeGradle 7. Gradle `9.2.1` is not enough and fails during `:forge` configuration.
+- ForgeGradle 7 run configs must use `workingDir.convention(...)` or `workingDir = ...`; the old `workingDirectory(...)` MDK syntax fails on `SlimeLauncherOptionsImpl`.
+- ForgeGradle 7 dependencies must use `implementation minecraft.dependency("net.minecraftforge:forge:${minecraft_version}-${forge_version}")` instead of the older `minecraft "..."` configuration notation.
 - Use `net.fabricmc.fabric-loom-remap` for the `1.21` to `1.21.11` Fabric/Quilt-compatible builds.
 - Keep `enable_forge=false` for profiles without a real Forge artifact, for example `1.21.2`; do not use placeholder versions like `unsupported` in an enabled Forge profile.

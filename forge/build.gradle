@@ -17,31 +17,39 @@ base {
 sourceSets.main.java.srcDir(rootProject.file('common/src/main/java'))
 sourceSets.main.resources.srcDir(rootProject.file('common/src/main/resources'))
 
+repositories {
+    // ForgeGradle 7 exposes these repository helpers after the plugin is applied.
+    // They avoid missing userdev/Minecraft library artifacts on newer 1.21.x lines.
+    maven minecraft.mavenizer
+    maven fg.forgeMaven
+    maven fg.minecraftLibsMaven
+    mavenCentral()
+}
+
 minecraft {
     mappings channel: 'official', version: project.minecraft_version
 
     runs {
         configureEach {
-            workingDirectory project.file('run')
-            property 'forge.logging.markers', 'REGISTRIES'
-            property 'forge.logging.console.level', 'info'
-            mods {
-                realtime {
-                    source sourceSets.main
-                }
-            }
+            // ForgeGradle 7 uses the workingDir property. The old workingDirectory(...)
+            // method from older MDKs fails on SlimeLauncherOptionsImpl.
+            workingDir.convention(layout.projectDirectory.dir('run'))
+            systemProperty 'forge.logging.markers', 'REGISTRIES'
+            systemProperty 'forge.logging.console.level', 'info'
         }
 
-        client {}
+        register('client')
 
-        server {
+        register('server') {
             args '--nogui'
         }
     }
 }
 
 dependencies {
-    minecraft "net.minecraftforge:forge:${project.minecraft_version}-${project.forge_version}"
+    // ForgeGradle 7 resolves userdev through minecraft.dependency(...), not the old
+    // minecraft configuration notation used by ForgeGradle 6-era MDKs.
+    implementation minecraft.dependency("net.minecraftforge:forge:${project.minecraft_version}-${project.forge_version}")
 }
 
 processResources {

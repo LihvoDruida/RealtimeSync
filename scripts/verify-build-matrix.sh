@@ -46,6 +46,16 @@ if grep -R --exclude="verify-build-matrix.sh" "gradle-9.2.1-bin.zip\|Gradle Wrap
   fail "Old Gradle 9.2.1 references remain"
 fi
 
+
+if grep -R --exclude="verify-build-matrix.sh" "workingDirectory[[:space:]]" -n forge/build.gradle; then
+  fail "ForgeGradle 7 does not support old workingDirectory(...) run DSL"
+fi
+
+grep -q "workingDir.convention" forge/build.gradle || fail "Forge module must use ForgeGradle 7 workingDir.convention(...)"
+grep -q "implementation minecraft.dependency" forge/build.gradle || fail "Forge module must use ForgeGradle 7 minecraft.dependency(...)"
+grep -q "maven fg.forgeMaven" forge/build.gradle || fail "Forge module must add ForgeGradle 7 Forge Maven helper"
+grep -q "maven fg.minecraftLibsMaven" forge/build.gradle || fail "Forge module must add ForgeGradle 7 Minecraft libs Maven helper"
+
 bash -n scripts/build-all-profiles.sh
 
 echo "Build matrix static verification passed."

@@ -217,3 +217,5 @@ Requires Java 21 and the bundled Gradle Wrapper 9.3.0 because Fabric Loom Remap 
 - Gradle wrapper is pinned to 9.3.0 so modern Fabric Loom Remap 1.15.x and ForgeGradle 7.x can resolve Minecraft 1.21.10/1.21.11 correctly.
 - ForgeGradle 6.x is not used because it fails on newer Forge 60.x/61.x userdev artifacts.
 - A disabled loader in `buildProfiles/<version>.properties` is skipped before its loader-specific dependencies are resolved. This prevents placeholder values such as `forge_version=unsupported` from breaking profile tasks.
+- ForgeGradle 7 run configs must use `workingDir.convention(...)` or `workingDir = ...`; the old `workingDirectory(...)` MDK syntax fails during project configuration.
+- ForgeGradle 7 Forge dependencies use `implementation minecraft.dependency("net.minecraftforge:forge:${minecraft_version}-${forge_version}")`; do not use the old ForgeGradle 6 `minecraft "..."` dependency notation.
