@@ -86,6 +86,14 @@ def main() -> int:
         if require(props, path, "curseforge_java_versions") != f"Java {expected_java}":
             fail(f"{path}: curseforge_java_versions must be Java {expected_java}")
 
+        expected_mapping_mode = locked.get("fabricMappings")
+        if profile.startswith("26."):
+            if expected_mapping_mode != "none-unobfuscated-official-namespace":
+                fail(f"Compatibility lock {profile}: 26.x Fabric/Quilt builds must use no Loom mappings dependency")
+        else:
+            if expected_mapping_mode != "official-mojang-with-loom-remap":
+                fail(f"Compatibility lock {profile}: 1.21.x Fabric/Quilt builds must use official Mojang mappings through Loom Remap")
+
         if require(props, path, "fabric_loader_version") != locked.get("fabricLoader"):
             fail(f"{path}: fabric_loader_version disagrees with compatibility lock")
         if require(props, path, "loader_version") != locked.get("fabricLoader"):

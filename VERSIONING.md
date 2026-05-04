@@ -259,3 +259,11 @@ bash scripts/verify-build-matrix.sh
 ```
 
 Use `python3 scripts/validate-dependency-artifacts.py --online` when you need to probe Maven/Fabric/Forge/NeoForge repositories directly. See `docs/COMPATIBILITY.md` for the full process.
+## Minecraft 26.1.x Fabric/Quilt builds
+
+Minecraft 26.1.x is treated differently from 1.21.x for Fabric-compatible builds.
+Fabric Loader and Fabric API exist for 26.1.x, but the build script must not request `loom.officialMojangMappings()` for those profiles.
+The 26.1.x game jars are already in the official namespace, so the Fabric and Quilt modules switch to `net.fabricmc.fabric-loom`, remove the `mappings` dependency, and use standard `implementation` dependencies.
+
+For 1.21.x, the modules still use `net.fabricmc.fabric-loom-remap` with explicit `loom.officialMojangMappings()`.
+

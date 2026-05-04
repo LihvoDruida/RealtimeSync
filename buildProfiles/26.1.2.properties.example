@@ -15,8 +15,8 @@ enable_forge=true
 enable_neoforge=true
 
 # Fabric / Quilt-compatible builds
-fabric_loader_version=0.18.4
-loader_version=0.18.4
+fabric_loader_version=0.19.2
+loader_version=0.19.2
 fabric_version=0.148.0+26.1.2
 
 # Forge build

@@ -12,25 +12,20 @@ fail() {
 [[ -s config/build-compatibility.lock.json ]] || fail "Missing config/build-compatibility.lock.json"
 python3 scripts/validate-build-profiles.py
 python3 scripts/validate-dependency-artifacts.py
-python3 -m py_compile scripts/generate-ci-matrix.py scripts/validate-build-profiles.py scripts/validate-dependency-artifacts.py scripts/validate-jar-metadata.py
+python3 -m py_compile \
+  scripts/generate-ci-matrix.py \
+  scripts/validate-build-profiles.py \
+  scripts/validate-dependency-artifacts.py \
+  scripts/validate-jar-metadata.py \
+  scripts/check-ci-matrix.py \
+  scripts/check-fabric-loom-branches.py
 python3 scripts/generate-ci-matrix.py >/tmp/realtime-sync-matrix.json
-python3 - <<'PY'
-import json
-from pathlib import Path
-matrix = json.loads(Path('/tmp/realtime-sync-matrix.json').read_text())
-items = matrix.get('include', [])
-if not items:
-    raise SystemExit('ERROR: generated CI matrix is empty')
-if {'mc_profile': '1.21.2', 'loader': 'forge'} in items:
-    raise SystemExit('ERROR: generated CI matrix must not include unsupported 1.21.2 Forge')
-for item in items:
-    if set(item) != {'mc_profile', 'loader'}:
-        raise SystemExit(f'ERROR: invalid matrix item: {item}')
-print(f'Generated CI matrix contains {len(items)} supported build entries.')
-PY
+python3 scripts/check-ci-matrix.py
+python3 scripts/check-fabric-loom-branches.py
 
 grep -q "gradle-9.4.0-bin.zip" gradle/wrapper/gradle-wrapper.properties || fail "Gradle wrapper must be 9.4.0 for 26.1.x"
-grep -q "id 'net.fabricmc.fabric-loom-remap' version '1.15.5' apply false" build.gradle || fail "Root build must use Fabric Loom Remap 1.15.5"
+grep -q "id 'net.fabricmc.fabric-loom-remap' version '1.15.5' apply false" build.gradle || fail "Root build must use Fabric Loom Remap 1.15.5 for 1.21.x"
+grep -q "id 'net.fabricmc.fabric-loom' version '1.15.5' apply false" build.gradle || fail "Root build must use Fabric Loom 1.15.5 for 26.1.x unobfuscated builds"
 grep -q "id 'net.minecraftforge.gradle' version '7.0.25' apply false" build.gradle || fail "Root build must use ForgeGradle 7.0.25"
 grep -q "id 'net.neoforged.moddev' version '2.0.141' apply false" build.gradle || fail "Root build must use NeoForge ModDev 2.0.141"
 
@@ -44,7 +39,7 @@ if grep -R -E --exclude="*.example" "^(fabric_version|forge_version|neoforge_ver
   fail "Dynamic loader dependency versions are forbidden in active profiles"
 fi
 
-if grep -R --exclude="verify-build-matrix.sh" "gradle-9.2.1-bin.zip\|gradle-9.3.0-bin.zip\|Gradle Wrapper 9.2.1\|Gradle Wrapper 9.3.0" -n .; then
+if grep -R --exclude="verify-build-matrix.sh" "gradle-9.2.1-bin.zip\|gradle-9.3.0-bin.zip\|Gradle Wrapper 9.2.1\|Gradle Wrapper 9.3.0" -n build.gradle settings.gradle README.md VERSIONING.md gradle/wrapper .github buildProfiles scripts config docs; then
   fail "Old Gradle 9.2.1/9.3.0 references remain; the 26.1.x matrix requires Gradle 9.4.0"
 fi
 
@@ -91,7 +86,6 @@ if grep -R "event.getLevel()" forge/src/main/java -n; then
   fail "Forge source must not call event.getLevel(); it is not stable across the whole range"
 fi
 
-# Keep Java parser honest for code that does not require Minecraft jars.
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "${tmpdir}"' EXIT
 javac -d "${tmpdir}" \

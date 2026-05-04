@@ -8,7 +8,8 @@ if (!rootProject.ext.isLoaderEnabled('quilt')) {
     return
 }
 
-apply plugin: 'net.fabricmc.fabric-loom-remap'
+def isMinecraft26Plus = project.minecraft_version.toString().startsWith('26.')
+apply plugin: isMinecraft26Plus ? 'net.fabricmc.fabric-loom' : 'net.fabricmc.fabric-loom-remap'
 
 base {
     archivesName = "${project.archives_base_name}-quilt-${project.minecraft_version}"
@@ -34,9 +35,20 @@ configurations.configureEach {
 
 dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    mappings loom.officialMojangMappings()
-    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+    if (isMinecraft26Plus) {
+        // Minecraft 26.x is distributed in the official namespace. Fabric's 26.1
+        // porting guide explicitly says to remove the mappings dependency and
+        // to use standard Gradle configurations instead of modImplementation.
+        implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+        implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+    } else {
+        // Minecraft 1.21.x still needs Loom to remap Fabric API onto Mojang's
+        // official mappings, so keep the remap plugin and explicit mappings.
+        mappings loom.officialMojangMappings()
+        modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+        modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+    }
 }
 
 processResources {
