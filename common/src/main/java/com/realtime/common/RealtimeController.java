@@ -8,7 +8,9 @@ import net.minecraft.world.level.Level;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.Set;
 
 public final class RealtimeController {
     private static final int CONFIG_RELOAD_CHECK_INTERVAL_TICKS = 100;
@@ -52,8 +54,9 @@ public final class RealtimeController {
     public void onWorldLoad(MinecraftServer server, ServerLevel level) {
         reloadConfig(false);
         ensureDaylightCycleOff(level, server);
+        // Avoid syncing every loaded level immediately. Multiple dimensions often load in a burst;
+        // scheduling the next regular tick prevents repeated full-world scans while still syncing quickly.
         tickCounter = Math.max(0, config.updateInterval - 1);
-        syncServerTime(server);
     }
 
     public void onServerTick(MinecraftServer server) {
@@ -107,11 +110,17 @@ public final class RealtimeController {
 
     private int applyTime(MinecraftServer server, long targetTicks) {
         int syncedWorlds = 0;
+        Set<String> sleepingDimensions = sleepingDimensionIds(server);
+        boolean skippedForSleep = false;
+
         for (ServerLevel level : server.getAllLevels()) {
             if (!shouldSyncLevel(level)) {
                 continue;
             }
-            if (shouldSkipForSleep(server, level)) {
+
+            String dimensionId = dimensionId(level);
+            if (sleepingDimensions.contains(dimensionId)) {
+                skippedForSleep = true;
                 continue;
             }
 
@@ -121,6 +130,12 @@ public final class RealtimeController {
             level.setDayTime(ticksToApply);
             syncedWorlds++;
         }
+
+        if (config.debugLogging && skippedForSleep && !sleepSkipLogged) {
+            logger.info("Skipping time sync while players are sleeping. Set overrideSleepTime=true to force sync during sleep.");
+        }
+        sleepSkipLogged = skippedForSleep;
+
         return syncedWorlds;
     }
 
@@ -169,24 +184,20 @@ public final class RealtimeController {
         return normalized;
     }
 
-    private boolean shouldSkipForSleep(MinecraftServer server, ServerLevel level) {
+    private Set<String> sleepingDimensionIds(MinecraftServer server) {
         if (!config.respectSleep || config.overrideSleepTime) {
             sleepSkipLogged = false;
-            return false;
+            return Set.of();
         }
 
+        Set<String> sleepingDimensions = new HashSet<>();
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            if (player.level() == level && player.isSleeping()) {
-                if (config.debugLogging && !sleepSkipLogged) {
-                    logger.info("Skipping time sync while players are sleeping. Set overrideSleepTime=true to force sync during sleep.");
-                }
-                sleepSkipLogged = true;
-                return true;
+            if (player.isSleeping() && player.level() instanceof ServerLevel level) {
+                sleepingDimensions.add(dimensionId(level));
             }
         }
 
-        sleepSkipLogged = false;
-        return false;
+        return sleepingDimensions;
     }
 
     private void ensureDaylightCycleOff(ServerLevel level, MinecraftServer server) {

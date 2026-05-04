@@ -9,6 +9,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Properties;
 import java.util.Set;
+import java.util.Locale;
 
 public final class RealtimeConfig {
     public static final String SYNC_MODE_INSTANT = "instant";
@@ -182,7 +183,7 @@ public final class RealtimeConfig {
             return SYNC_MODE_INSTANT;
         }
 
-        String normalized = value.trim().toLowerCase();
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
         if (SYNC_MODE_INSTANT.equals(normalized) || SYNC_MODE_SMOOTH.equals(normalized)) {
             return normalized;
         }
@@ -198,7 +199,7 @@ public final class RealtimeConfig {
         Set<String> values = new LinkedHashSet<>();
         String[] parts = rawValue.split(",");
         for (String part : parts) {
-            String value = part.trim().toLowerCase();
+            String value = part.trim().toLowerCase(Locale.ROOT);
             if (value.isEmpty()) {
                 continue;
             }
@@ -222,7 +223,7 @@ public final class RealtimeConfig {
             return fallback;
         }
 
-        String normalized = rawValue.trim().toLowerCase();
+        String normalized = rawValue.trim().toLowerCase(Locale.ROOT);
         if ("true".equals(normalized)) {
             return true;
         }

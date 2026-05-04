@@ -103,6 +103,13 @@ if grep -q "buildAllLoaders" .github/workflows/package.yml; then
   fail "Workflow must not build all loaders inside one matrix job; use mc_profile x loader isolation"
 fi
 python3 -m py_compile scripts/validate-jar-metadata.py
+
+if grep -n "String rawValue = properties.getProperty(key);[[:space:]]*$" common/src/main/java/com/realtime/common/RealtimeConfig.java | awk -F: 'prev+1==$1 { found=1 } { prev=$1 } END { exit found ? 0 : 1 }'; then
+  fail "RealtimeConfig must not duplicate consecutive rawValue declarations"
+fi
+
+grep -q "sleepingDimensionIds" common/src/main/java/com/realtime/common/RealtimeController.java || fail "RealtimeController must precompute sleeping dimensions instead of scanning players for every world"
+grep -Fq 'if: ${{ always() && github.ref_type == '"'"'tag'"'"' }}' .github/workflows/package.yml || fail "Release/publish jobs must still run and collect successful artifacts when one loader matrix entry fails"
 bash -n scripts/ci-read-profile.sh
 
 grep -q "ServerLifecycleHooks.getCurrentServer" forge/src/main/java/com/realtime/forge/RealtimeForge.java || fail "Forge source must use ServerLifecycleHooks-based ticking for cross-1.21.x compatibility"
@@ -133,7 +140,7 @@ grep -q "ignoredDimensions" common/src/main/java/com/realtime/common/RealtimeCon
 grep -q "shouldSyncLevel" common/src/main/java/com/realtime/common/RealtimeController.java || fail "RealtimeController must own dimension filtering"
 grep -q "respectSleep" common/src/main/java/com/realtime/common/RealtimeConfig.java || fail "RealtimeConfig must support respectSleep"
 grep -q "overrideSleepTime" common/src/main/java/com/realtime/common/RealtimeConfig.java || fail "RealtimeConfig must support overrideSleepTime"
-grep -q "shouldSkipForSleep" common/src/main/java/com/realtime/common/RealtimeController.java || fail "RealtimeController must own sleep-aware sync"
+grep -q "sleepingDimensionIds" common/src/main/java/com/realtime/common/RealtimeController.java || fail "RealtimeController must own sleep-aware sync"
 
 for source in fabric/src/main/java/com/realtime/fabric/RealtimeFabric.java forge/src/main/java/com/realtime/forge/RealtimeForge.java neoforge/src/main/java/com/realtime/neoforge/RealtimeNeoForge.java; do
   grep -q "RealtimeController" "${source}" || fail "${source} must delegate runtime behavior to RealtimeController"
