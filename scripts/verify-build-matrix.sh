@@ -65,6 +65,10 @@ if grep -R "import net.minecraft.world.level.GameRules" common fabric forge neof
   fail "Direct GameRules imports are not compatible across all 1.21.x mappings"
 fi
 
+if grep -R "\.dimension()\.location()" common fabric forge neoforge -n; then
+  fail "ResourceKey.location() is not available across the whole 1.21.x mapping range; use a compatibility helper"
+fi
+
 if grep -R "performPrefixedCommand\|gamerule doDaylightCycle\|gamerule minecraft:advance_time" common fabric forge neoforge -n; then
   fail "Sources must not change daylight gamerules through commands; use reflective GameRules mutation to avoid 1.21.x gamerule rename/runtime log spam"
 fi

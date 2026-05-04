@@ -8,11 +8,14 @@ import net.minecraft.world.level.Level;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 
 public final class RealtimeController {
     private static final int CONFIG_RELOAD_CHECK_INTERVAL_TICKS = 100;
     private static final int DAYLIGHT_RULE_GUARD_INTERVAL_TICKS = 20 * 60;
     private static final String OVERWORLD_DIMENSION_ID = "minecraft:overworld";
+    private static final String NETHER_DIMENSION_ID = "minecraft:the_nether";
+    private static final String END_DIMENSION_ID = "minecraft:the_end";
 
     private final RealtimeLog logger;
     private final Path configPath;
@@ -136,11 +139,34 @@ public final class RealtimeController {
     }
 
     private String dimensionId(ServerLevel level) {
-        try {
-            return level.dimension().location().toString().toLowerCase();
-        } catch (RuntimeException exception) {
-            return level.dimension().equals(Level.OVERWORLD) ? OVERWORLD_DIMENSION_ID : level.dimension().toString().toLowerCase();
+        Object dimensionKey = level.dimension();
+        if (Level.OVERWORLD.equals(dimensionKey)) {
+            return OVERWORLD_DIMENSION_ID;
         }
+        if (Level.NETHER.equals(dimensionKey)) {
+            return NETHER_DIMENSION_ID;
+        }
+        if (Level.END.equals(dimensionKey)) {
+            return END_DIMENSION_ID;
+        }
+        return normalizeDimensionId(String.valueOf(dimensionKey));
+    }
+
+    private String normalizeDimensionId(String raw) {
+        String normalized = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+        int registrySeparator = normalized.lastIndexOf(" / ");
+        if (registrySeparator >= 0) {
+            normalized = normalized.substring(registrySeparator + 3);
+        } else {
+            int bracket = normalized.lastIndexOf('[');
+            if (bracket >= 0 && bracket + 1 < normalized.length()) {
+                normalized = normalized.substring(bracket + 1);
+            }
+        }
+        if (normalized.endsWith("]")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalized;
     }
 
     private boolean shouldSkipForSleep(MinecraftServer server, ServerLevel level) {
