@@ -39,11 +39,20 @@ ext.loaderTaskOrSkip = { String taskName, String loaderName, String targetPath -
     tasks.register(taskName) {
         group = 'build'
         description = "Builds the ${loaderName} jar for the selected Minecraft profile when supported."
-        if (rootProject.ext.isLoaderEnabled(loaderName.toLowerCase())) {
+
+        String loaderKey = loaderName.toLowerCase(Locale.ROOT)
+        boolean loaderEnabled = rootProject.ext.isLoaderEnabled(loaderKey)
+        boolean projectIncluded = rootProject.findProject(":${loaderKey}") != null
+
+        if (loaderEnabled && projectIncluded) {
             dependsOn targetPath
         } else {
             doLast {
-                logger.lifecycle("Skipping ${loaderName} for Minecraft ${rootProject.ext.minecraft_version}: profile disables enable_${loaderName.toLowerCase()}.")
+                if (!loaderEnabled) {
+                    logger.lifecycle("Skipping ${loaderName} for Minecraft ${rootProject.ext.minecraft_version}: profile disables enable_${loaderKey}.")
+                } else {
+                    logger.lifecycle("Skipping ${loaderName}: project :${loaderKey} is not included for targetLoader=${findProperty('targetLoader') ?: System.getenv('TARGET_LOADER') ?: 'all'}.")
+                }
             }
         }
     }
@@ -71,6 +80,12 @@ subprojects {
     tasks.withType(JavaCompile).configureEach {
         options.encoding = 'UTF-8'
         options.release = (findProperty('java_version') ?: '21') as int
+    }
+
+    tasks.withType(JavaExec).configureEach {
+        javaLauncher.set(javaToolchains.launcherFor {
+            languageVersion = JavaLanguageVersion.of((findProperty('java_version') ?: '21') as int)
+        })
     }
 
     tasks.withType(ProcessResources).configureEach {

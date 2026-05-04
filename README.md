@@ -312,3 +312,8 @@ Requires Java 21 and the bundled Gradle Wrapper 9.3.0 because Fabric Loom Remap 
 ### Build compatibility notes
 
 The 1.21.x matrix intentionally avoids direct `GameRules` imports in loader entrypoints because Mojang mappings and gamerule identifiers are not stable across every 1.21.x profile. The mod also does not call `/gamerule doDaylightCycle false`: Minecraft 1.21.11 renamed gamerules to namespaced IDs such as `minecraft:advance_time`, while older profiles still use `doDaylightCycle`. Instead, the loader entrypoints set the boolean gamerule through reflection and try the known runtime key names (`DO_DAYLIGHT_CYCLE`, `ADVANCE_TIME`, `RULE_DAYLIGHT`, `RULE_ADVANCE_TIME`) plus the stable intermediary field (`field_19396`). Forge avoids the Forge event bus entirely and uses `ServerLifecycleHooks` with a safe server-thread scheduler because Forge 1.21.6+ exposes EventBus 7 migration helpers instead of the older APIs. NeoForge profile versions are pinned exactly; do not use `21.x.+` with ModDev/NeoForm because it is resolved as a literal userdev artifact in this setup.
+
+
+### CI loader isolation
+
+CI builds each `mc_profile x loader` pair separately using `-PtargetLoader=<loader>`. This prevents metadata-only or Fabric/Quilt/NeoForge jobs from configuring Forge userdev artifacts, which is important for fragile ForgeGradle/Mavenizer versions such as Minecraft `1.21.10`.

@@ -44,7 +44,31 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = 'RealtimeSync'
-include 'fabric'
-include 'quilt'
-include 'forge'
-include 'neoforge'
+
+// CI builds exactly one loader per matrix entry. Keeping every loader included for
+// metadata-only tasks causes unrelated loaders to configure and resolve their
+// userdev artifacts. This is especially expensive and fragile for Forge 1.21.10,
+// where ForgeGradle/Mavenizer performs a full Minecraft recompile during project
+// configuration. Use -PtargetLoader=<fabric|quilt|forge|neoforge> to include one
+// loader, -PtargetLoader=all for local buildAllLoaders, or -PtargetLoader=none for
+// root-only tasks such as printBuildProfile.
+def supportedLoaders = ['fabric', 'quilt', 'forge', 'neoforge']
+def requestedTasks = gradle.startParameter.taskNames.collect { it.toString() }
+def rootOnlyProfileTask = !requestedTasks.isEmpty() && requestedTasks.every { taskName ->
+    taskName == 'printBuildProfile' || taskName.endsWith(':printBuildProfile')
+}
+def targetLoader = gradle.startParameter.projectProperties.get('targetLoader')
+        ?: System.getenv('TARGET_LOADER')
+        ?: (rootOnlyProfileTask ? 'none' : 'all')
+
+targetLoader = targetLoader.toString().toLowerCase(Locale.ROOT)
+
+if (targetLoader == 'all') {
+    supportedLoaders.each { include it }
+} else if (targetLoader == 'none') {
+    // Root-only Gradle invocation. Do not include loader projects.
+} else if (supportedLoaders.contains(targetLoader)) {
+    include targetLoader
+} else {
+    throw new GradleException("Unsupported targetLoader='${targetLoader}'. Use one of: all, none, ${supportedLoaders.join(', ')}")
+}

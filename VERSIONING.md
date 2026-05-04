@@ -204,3 +204,8 @@ overrideSleepTime=false
 ```
 
 Do not revert these defaults to `syncMode=instant`, `syncAllWorlds=true`, `updateInterval=60`, or `maxSmoothStepTicks=240` unless there is a specific compatibility reason. The goal is realistic sky movement: Overworld only, one-second updates, adaptive catch-up, and no sleep conflicts.
+
+
+### Forge 1.21.10 CI note
+
+The `1.21.10` Forge profile is pinned to the official recommended Forge `60.1.0` instead of the latest `60.1.9`. The latest userdev can fail during ForgeGradle 7 Mavenizer source recompilation on GitHub-hosted runners. CI also passes `-PtargetLoader=<loader>` so one loader matrix entry never configures unrelated loader projects.
