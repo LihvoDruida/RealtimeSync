@@ -65,12 +65,16 @@ if grep -R "import net.minecraft.world.level.GameRules" fabric forge neoforge -n
   fail "Direct GameRules imports are not compatible across all 1.21.x mappings"
 fi
 
-if grep -R "net.minecraftforge.eventbus.api.SubscribeEvent\|@SubscribeEvent\|MinecraftForge.EVENT_BUS.register" forge/src/main/java -n; then
-  fail "Forge source must not use old annotation event-bus registration on current 1.21.x Forge"
+if grep -R "net.minecraftforge.eventbus.api.SubscribeEvent\|@SubscribeEvent\|MinecraftForge.EVENT_BUS" forge/src/main/java -n; then
+  fail "Forge source must not use MinecraftForge.EVENT_BUS or old annotation event-bus registration; Forge 1.21.6+ uses EventBus 7 migration helpers"
 fi
 
-grep -q "MinecraftForge.EVENT_BUS.addListener(this::onLevelTick)" forge/src/main/java/com/realtime/forge/RealtimeForge.java || fail "Forge source must register typed listeners"
-grep -q "TickEvent.LevelTickEvent.Post" forge/src/main/java/com/realtime/forge/RealtimeForge.java || fail "Forge source must tick through LevelTickEvent.Post"
+if grep -R "event.getLevel()" forge/src/main/java -n; then
+  fail "Forge source must not call event.getLevel(); TickEvent.LevelTickEvent.Post does not expose it across the whole 1.21.x range"
+fi
+
+grep -q "ServerLifecycleHooks.getCurrentServer" forge/src/main/java/com/realtime/forge/RealtimeForge.java || fail "Forge source must use ServerLifecycleHooks-based ticking for cross-1.21.x compatibility"
+grep -q "ScheduledExecutorService" forge/src/main/java/com/realtime/forge/RealtimeForge.java || fail "Forge source must schedule safe server-thread ticks without Forge event-bus APIs"
 
 bash -n scripts/build-all-profiles.sh
 

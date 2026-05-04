@@ -7,18 +7,19 @@ import com.realtime.common.RealtimeLog;
 import com.realtime.common.RealtimeMath;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.Level;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.level.LevelEvent;
-import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.loading.FMLPaths;
+import net.minecraftforge.server.ServerLifecycleHooks;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Mod(RealtimeConstants.MOD_ID)
 public final class RealtimeForge {
@@ -26,11 +27,14 @@ public final class RealtimeForge {
     private static final RealtimeLog LOG = new Log4jRealtimeLog(LOGGER);
     private static final int CONFIG_RELOAD_CHECK_INTERVAL_TICKS = 100;
 
-    private RealtimeConfig config = new RealtimeConfig();
     private final RealtimeMath timeMath = new RealtimeMath();
-
     private final Path configPath;
     private final Path legacyConfigPath;
+    private final ScheduledExecutorService scheduler;
+    private final AtomicBoolean serverWorkQueued = new AtomicBoolean(false);
+
+    private RealtimeConfig config = new RealtimeConfig();
+    private MinecraftServer activeServer;
     private long configLastModified = -1L;
     private int tickCounter = 0;
     private int configReloadTickCounter = 0;
@@ -41,48 +45,46 @@ public final class RealtimeForge {
         legacyConfigPath = configDir.resolve("realtime.toml");
         reloadConfig(true);
 
-        MinecraftForge.EVENT_BUS.addListener(this::onLevelLoad);
-        MinecraftForge.EVENT_BUS.addListener(this::onLevelTick);
+        scheduler = Executors.newSingleThreadScheduledExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "RealtimeSync-Forge-Ticker");
+            thread.setDaemon(true);
+            return thread;
+        });
+        scheduler.scheduleAtFixedRate(this::queueServerTick, 50L, 50L, TimeUnit.MILLISECONDS);
 
         LOGGER.info("{} loaded for Forge. Config: {}", RealtimeConstants.MOD_NAME, configPath.toAbsolutePath());
     }
 
-    public void onLevelLoad(LevelEvent.Load event) {
-        if (!(event.getLevel() instanceof ServerLevel level)) {
-            return;
-        }
-
-        MinecraftServer server = level.getServer();
+    private void queueServerTick() {
+        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
         if (server == null) {
+            activeServer = null;
+            serverWorkQueued.set(false);
             return;
         }
 
-        reloadConfig(false);
-        if (config.forceDaylightCycleOff) {
-            disableDaylightCycle(level, server);
+        if (!serverWorkQueued.compareAndSet(false, true)) {
+            return;
         }
 
-        tickCounter = Math.max(0, config.updateInterval - 1);
-        syncServerTime(server);
+        server.execute(() -> {
+            try {
+                handleServerTick(server);
+            } finally {
+                serverWorkQueued.set(false);
+            }
+        });
     }
 
-    public void onLevelTick(TickEvent.LevelTickEvent.Post event) {
-        if (!(event.getLevel() instanceof ServerLevel level)) {
+    private void handleServerTick(MinecraftServer server) {
+        if (activeServer != server) {
+            activeServer = server;
+            reloadConfig(false);
+            tickCounter = Math.max(0, config.updateInterval - 1);
+            syncServerTime(server);
             return;
         }
 
-        // Run once per server tick instead of once per loaded dimension.
-        if (!level.dimension().equals(Level.OVERWORLD)) {
-            return;
-        }
-
-        MinecraftServer server = level.getServer();
-        if (server != null) {
-            onServerTick(server);
-        }
-    }
-
-    private void onServerTick(MinecraftServer server) {
         checkConfigReload();
 
         if (!config.enabled) {
@@ -105,9 +107,7 @@ public final class RealtimeForge {
 
         try {
             if (config.forceDaylightCycleOff) {
-                for (ServerLevel level : server.getAllLevels()) {
-                    disableDaylightCycle(level, server);
-                }
+                disableDaylightCycle(server);
             }
 
             long ticks = config.customDayLengthMinutes > 0
@@ -140,7 +140,7 @@ public final class RealtimeForge {
         server.overworld().setDayTime(ticks);
     }
 
-    private void disableDaylightCycle(ServerLevel level, MinecraftServer server) {
+    private void disableDaylightCycle(MinecraftServer server) {
         // Avoid direct GameRules imports: Mojang mappings moved this class/package in newer 1.21.x lines.
         // The command API is stable across the targeted 1.21 profiles and changes the same doDaylightCycle rule.
         server.getCommands().performPrefixedCommand(
