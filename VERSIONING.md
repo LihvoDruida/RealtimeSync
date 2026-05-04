@@ -267,3 +267,11 @@ The 26.1.x game jars are already in the official namespace, so the Fabric and Qu
 
 For 1.21.x, the modules still use `net.fabricmc.fabric-loom-remap` with explicit `loom.officialMojangMappings()`.
 
+
+### Fabric/Quilt lifecycle compatibility
+
+Fabric/Quilt entrypoints intentionally use only `ServerTickEvents.END_SERVER_TICK`.
+Do not reintroduce `ServerWorldEvents.LOAD`: Fabric API `26.1.x` does not expose
+that class in `net.fabricmc.fabric.api.event.lifecycle.v1`, so using it breaks the
+`26.1`, `26.1.1`, and `26.1.2` Fabric/Quilt builds. The common controller performs
+initial daylight-cycle guarding and the first sync from the server tick path instead.

@@ -78,6 +78,10 @@ grep -R "RealtimeWorldTime.readDayTime" common/src/main/java >/dev/null || fail 
 grep -R "RealtimeWorldTime.setDayTime" common/src/main/java >/dev/null || fail "Runtime must use RealtimeWorldTime for day-time writes"
 grep -R "RealtimeServerState.tickCount" common/src/main/java >/dev/null || fail "Runtime must de-duplicate per-level tick events through RealtimeServerState"
 
+if grep -R "ServerWorldEvents" fabric/src/main/java quilt/src/main/java -n 2>/dev/null; then
+  fail "Fabric/Quilt source must not use ServerWorldEvents; Fabric API 26.1.x does not expose it in the lifecycle package"
+fi
+
 if grep -R "net.minecraftforge.eventbus.api.SubscribeEvent\|@SubscribeEvent\|MinecraftForge.EVENT_BUS" forge/src/main/java -n; then
   fail "Forge source must not use old event-bus registration"
 fi
