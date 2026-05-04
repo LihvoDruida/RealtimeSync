@@ -135,6 +135,12 @@ grep -q "DAYLIGHT_RULE_GUARD_INTERVAL_TICKS" common/src/main/java/com/realtime/c
 
 grep -q "SYNC_MODE_SMOOTH" common/src/main/java/com/realtime/common/RealtimeConfig.java || fail "RealtimeConfig must support syncMode=smooth"
 grep -q "calculateSmoothTicks" common/src/main/java/com/realtime/common/RealtimeMath.java || fail "RealtimeMath must provide smooth time catch-up"
+grep -q "public String syncMode = SYNC_MODE_SMOOTH" common/src/main/java/com/realtime/common/RealtimeConfig.java || fail "Default syncMode must stay smooth for realistic movement"
+grep -q "public int updateInterval = 20" common/src/main/java/com/realtime/common/RealtimeConfig.java || fail "Default updateInterval must stay at 20 ticks for smooth realtime tracking"
+grep -q "public int maxSmoothStepTicks = 12" common/src/main/java/com/realtime/common/RealtimeConfig.java || fail "Default maxSmoothStepTicks must stay realistic-smooth"
+grep -q "smoothSnapThresholdTicks" common/src/main/java/com/realtime/common/RealtimeConfig.java || fail "RealtimeConfig must support smoothSnapThresholdTicks"
+grep -q "smoothCatchupDivisor" common/src/main/java/com/realtime/common/RealtimeConfig.java || fail "RealtimeConfig must support smoothCatchupDivisor"
+grep -q "shortestDelta" common/src/main/java/com/realtime/common/RealtimeMath.java || fail "RealtimeMath must smooth along the shortest day-night path"
 grep -q "syncDimensions" common/src/main/java/com/realtime/common/RealtimeConfig.java || fail "RealtimeConfig must support syncDimensions allowlist"
 grep -q "ignoredDimensions" common/src/main/java/com/realtime/common/RealtimeConfig.java || fail "RealtimeConfig must support ignoredDimensions denylist"
 grep -q "shouldSyncLevel" common/src/main/java/com/realtime/common/RealtimeController.java || fail "RealtimeController must own dimension filtering"

@@ -51,19 +51,21 @@ The config file is shared between all loaders:
 config/realtime.properties
 ```
 
-Example:
+Example realistic-smooth profile:
 
 ```properties
 enabled=true
 forceDaylightCycleOff=true
-syncAllWorlds=true
-syncDimensions=
+syncAllWorlds=false
+syncDimensions=minecraft:overworld
 ignoredDimensions=
-syncMode=instant
-maxSmoothStepTicks=240
+syncMode=smooth
+maxSmoothStepTicks=12
+smoothSnapThresholdTicks=2
+smoothCatchupDivisor=240
 respectSleep=true
 overrideSleepTime=false
-updateInterval=60
+updateInterval=20
 offsetHours=0
 customDayLengthMinutes=0
 debugLogging=false
@@ -75,36 +77,57 @@ debugLogging=false
 | --- | --- | --- |
 | `enabled` | `true` | Enables or disables the mod without removing it. |
 | `forceDaylightCycleOff` | `true` | Keeps vanilla `doDaylightCycle` disabled so the mod controls time cleanly. |
-| `syncAllWorlds` | `true` | Syncs every loaded dimension when `syncDimensions` is empty. Set `false` to sync only the Overworld. |
-| `syncDimensions` | empty | Comma-separated allowlist of dimensions to sync, for example `minecraft:overworld,minecraft:the_nether`. Takes priority over `syncAllWorlds`. |
+| `syncAllWorlds` | `false` | Syncs every loaded dimension only when `syncDimensions` is empty and this is `true`. The realistic default is Overworld-only. |
+| `syncDimensions` | `minecraft:overworld` | Comma-separated allowlist of dimensions to sync. Takes priority over `syncAllWorlds`. Default keeps realistic sky movement only in the Overworld. |
 | `ignoredDimensions` | empty | Comma-separated denylist excluded from time sync. Useful for modded/custom dimensions. |
-| `syncMode` | `instant` | `instant` jumps directly to the target time. `smooth` gradually catches up and avoids visible sun/moon jumps. |
-| `maxSmoothStepTicks` | `240` | Maximum Minecraft ticks changed per sync when `syncMode=smooth`. |
+| `syncMode` | `smooth` | `instant` jumps directly to the target time. `smooth` gradually catches up and avoids visible sun/moon jumps. |
+| `maxSmoothStepTicks` | `12` | Hard cap for Minecraft ticks changed per sync when `syncMode=smooth`. Lower is smoother; higher catches up faster. |
+| `smoothSnapThresholdTicks` | `2` | If the current time is already this close to the target, snap exactly to prevent tiny jitter. |
+| `smoothCatchupDivisor` | `240` | Adaptive catch-up softness. Higher values are gentler; lower values catch up faster. |
 | `respectSleep` | `true` | Skips time sync while players are sleeping so the mod does not fight sleep mechanics. |
 | `overrideSleepTime` | `false` | Forces sync even while players are sleeping. Overrides `respectSleep`. |
-| `updateInterval` | `60` | Ticks between syncs. `20` ticks = 1 second. |
+| `updateInterval` | `20` | Ticks between syncs. `20` ticks = 1 second. The realistic-smooth profile updates once per second. |
 | `offsetHours` | `0` | Shifts real-time sync by `-23..23` hours. |
 | `customDayLengthMinutes` | `0` | `0` means real clock sync. Values above `0` set a custom Minecraft day length. |
 | `debugLogging` | `false` | Enables verbose sync logs. |
 
-### Smooth sync
+See also: `docs/CONFIG_PRESETS.md` for ready-made realistic, ultra-smooth and fast-catch-up presets.
 
-Use `syncMode=smooth` to avoid abrupt sun/moon jumps after server start, config reloads or long downtime:
+### Smooth realistic sync
+
+The default profile is tuned for realistic and smooth sun/moon movement:
 
 ```properties
 syncMode=smooth
-maxSmoothStepTicks=240
+updateInterval=20
+maxSmoothStepTicks=12
+smoothSnapThresholdTicks=2
+smoothCatchupDivisor=240
 ```
 
-`maxSmoothStepTicks` controls how fast the world catches up on every sync. Higher values catch up faster; lower values are more gradual.
+How it behaves:
+
+- normal tracking updates once per second and stays close to the real clock;
+- small drift snaps only when it is visually unnoticeable;
+- large drift is corrected gradually instead of jumping the sky;
+- `maxSmoothStepTicks=12` means the fastest catch-up is capped and still visually smooth.
+
+For faster catch-up after long server downtime, raise `maxSmoothStepTicks` to `24` or lower `smoothCatchupDivisor` to `120`. For an even calmer sky, use `maxSmoothStepTicks=6` and keep `smoothCatchupDivisor=240`.
 
 ### Dimension filtering
 
-If `syncDimensions` is empty, `syncAllWorlds=true` syncs every loaded dimension and `syncAllWorlds=false` syncs only the Overworld.
+By default, only the Overworld is synced because Nether and End do not have a normal visible day-night sky.
 
 ```properties
 syncAllWorlds=false
-syncDimensions=minecraft:overworld,minecraft:the_nether
+syncDimensions=minecraft:overworld
+ignoredDimensions=
+```
+
+To sync multiple dimensions, use an explicit allowlist:
+
+```properties
+syncDimensions=minecraft:overworld,minecraft:the_nether,minecraft:the_end
 ignoredDimensions=some_mod:custom_dimension
 ```
 

@@ -20,17 +20,23 @@ public final class RealtimeConfig {
     private static final int MAX_CUSTOM_DAY_LENGTH_MINUTES = 60 * 24 * 7; // 7 real days
     private static final int MIN_SMOOTH_STEP_TICKS = 1;
     private static final int MAX_SMOOTH_STEP_TICKS = 24000;
+    private static final int MIN_SMOOTH_SNAP_THRESHOLD_TICKS = 0;
+    private static final int MAX_SMOOTH_SNAP_THRESHOLD_TICKS = 1200;
+    private static final int MIN_SMOOTH_CATCHUP_DIVISOR = 1;
+    private static final int MAX_SMOOTH_CATCHUP_DIVISOR = 24000;
 
     public boolean enabled = true;
     public boolean forceDaylightCycleOff = true;
-    public boolean syncAllWorlds = true;
-    public String syncDimensions = "";
+    public boolean syncAllWorlds = false;
+    public String syncDimensions = "minecraft:overworld";
     public String ignoredDimensions = "";
-    public String syncMode = SYNC_MODE_INSTANT;
-    public int maxSmoothStepTicks = 240;
+    public String syncMode = SYNC_MODE_SMOOTH;
+    public int maxSmoothStepTicks = 12;
+    public int smoothSnapThresholdTicks = 2;
+    public int smoothCatchupDivisor = 240;
     public boolean respectSleep = true;
     public boolean overrideSleepTime = false;
-    public int updateInterval = 60;
+    public int updateInterval = 20;
     public int offsetHours = 0;
     public int customDayLengthMinutes = 0;
     public boolean debugLogging = false;
@@ -65,6 +71,8 @@ public final class RealtimeConfig {
         config.ignoredDimensions = readString(properties, "ignoredDimensions", config.ignoredDimensions);
         config.syncMode = readString(properties, "syncMode", config.syncMode);
         config.maxSmoothStepTicks = readInt(properties, "maxSmoothStepTicks", config.maxSmoothStepTicks, logger);
+        config.smoothSnapThresholdTicks = readInt(properties, "smoothSnapThresholdTicks", config.smoothSnapThresholdTicks, logger);
+        config.smoothCatchupDivisor = readInt(properties, "smoothCatchupDivisor", config.smoothCatchupDivisor, logger);
         config.respectSleep = readBoolean(properties, "respectSleep", config.respectSleep, logger);
         config.overrideSleepTime = readBoolean(properties, "overrideSleepTime", config.overrideSleepTime, logger);
         config.updateInterval = readInt(properties, "updateInterval", config.updateInterval, logger);
@@ -110,12 +118,16 @@ public final class RealtimeConfig {
         int originalOffsetHours = offsetHours;
         int originalCustomDayLength = customDayLengthMinutes;
         int originalMaxSmoothStepTicks = maxSmoothStepTicks;
+        int originalSmoothSnapThresholdTicks = smoothSnapThresholdTicks;
+        int originalSmoothCatchupDivisor = smoothCatchupDivisor;
         String originalSyncMode = syncMode;
 
         updateInterval = clamp(updateInterval, MIN_UPDATE_INTERVAL_TICKS, MAX_UPDATE_INTERVAL_TICKS);
         offsetHours = clamp(offsetHours, -23, 23);
         customDayLengthMinutes = clamp(customDayLengthMinutes, 0, MAX_CUSTOM_DAY_LENGTH_MINUTES);
         maxSmoothStepTicks = clamp(maxSmoothStepTicks, MIN_SMOOTH_STEP_TICKS, MAX_SMOOTH_STEP_TICKS);
+        smoothSnapThresholdTicks = clamp(smoothSnapThresholdTicks, MIN_SMOOTH_SNAP_THRESHOLD_TICKS, MAX_SMOOTH_SNAP_THRESHOLD_TICKS);
+        smoothCatchupDivisor = clamp(smoothCatchupDivisor, MIN_SMOOTH_CATCHUP_DIVISOR, MAX_SMOOTH_CATCHUP_DIVISOR);
         syncMode = normalizeSyncMode(syncMode, logger);
         syncDimensionSet = parseDimensionSet(syncDimensions, "syncDimensions", logger);
         ignoredDimensionSet = parseDimensionSet(ignoredDimensions, "ignoredDimensions", logger);
@@ -141,6 +153,12 @@ public final class RealtimeConfig {
         if (originalMaxSmoothStepTicks != maxSmoothStepTicks) {
             logger.warn("Config value maxSmoothStepTicks={} is out of range. Using {}.", originalMaxSmoothStepTicks, maxSmoothStepTicks);
         }
+        if (originalSmoothSnapThresholdTicks != smoothSnapThresholdTicks) {
+            logger.warn("Config value smoothSnapThresholdTicks={} is out of range. Using {}.", originalSmoothSnapThresholdTicks, smoothSnapThresholdTicks);
+        }
+        if (originalSmoothCatchupDivisor != smoothCatchupDivisor) {
+            logger.warn("Config value smoothCatchupDivisor={} is out of range. Using {}.", originalSmoothCatchupDivisor, smoothCatchupDivisor);
+        }
         if (!originalSyncMode.equals(syncMode)) {
             logger.warn("Config value syncMode={} is invalid. Using {}.", originalSyncMode, syncMode);
         }
@@ -148,27 +166,36 @@ public final class RealtimeConfig {
 
     private String toFileContent() {
         return "# RealtimeSync configuration\n"
+                + "# Default profile: realistic-smooth. It follows the real clock gently instead of jumping the sun/moon.\n"
+                + "# Good baseline: syncMode=smooth, updateInterval=20, maxSmoothStepTicks=12, Overworld only.\n\n"
                 + "# enabled: true/false - master switch for the mod.\n"
                 + "enabled=" + enabled + "\n\n"
                 + "# forceDaylightCycleOff: true/false - keeps Minecraft's vanilla daylight cycle disabled.\n"
                 + "forceDaylightCycleOff=" + forceDaylightCycleOff + "\n\n"
-                + "# syncAllWorlds: true/false - true syncs every loaded dimension unless syncDimensions is set.\n"
+                + "# syncAllWorlds: true/false - false is more realistic by default because Nether/End have no normal day-night sky.\n"
+                + "# syncDimensions takes priority when it is not empty.\n"
                 + "syncAllWorlds=" + syncAllWorlds + "\n\n"
-                + "# syncDimensions: comma-separated allowlist. Empty = use syncAllWorlds/Overworld behavior.\n"
-                + "# Example: minecraft:overworld,minecraft:the_nether,minecraft:the_end\n"
+                + "# syncDimensions: comma-separated allowlist. Default = Overworld only for realistic behavior.\n"
+                + "# Examples: minecraft:overworld or minecraft:overworld,minecraft:the_nether,minecraft:the_end\n"
                 + "syncDimensions=" + syncDimensions + "\n\n"
                 + "# ignoredDimensions: comma-separated denylist excluded from syncing. Empty = none.\n"
                 + "# Example: some_mod:custom_dimension\n"
                 + "ignoredDimensions=" + ignoredDimensions + "\n\n"
-                + "# syncMode: instant or smooth. instant jumps directly; smooth gradually catches up to the target time.\n"
+                + "# syncMode: instant or smooth. smooth is recommended for realistic sun/moon movement.\n"
                 + "syncMode=" + syncMode + "\n\n"
-                + "# maxSmoothStepTicks: maximum Minecraft ticks changed per sync when syncMode=smooth.\n"
+                + "# maxSmoothStepTicks: hard cap for Minecraft ticks changed per sync when syncMode=smooth.\n"
+                + "# With updateInterval=20 and maxSmoothStepTicks=12, the fastest catch-up is still visually smooth.\n"
                 + "maxSmoothStepTicks=" + maxSmoothStepTicks + "\n\n"
+                + "# smoothSnapThresholdTicks: if the world is already this close to target, snap exactly to avoid tiny jitter.\n"
+                + "smoothSnapThresholdTicks=" + smoothSnapThresholdTicks + "\n\n"
+                + "# smoothCatchupDivisor: higher = gentler adaptive catch-up; lower = catches up faster.\n"
+                + "# Formula: step ~= drift / smoothCatchupDivisor, capped by maxSmoothStepTicks.\n"
+                + "smoothCatchupDivisor=" + smoothCatchupDivisor + "\n\n"
                 + "# respectSleep: true skips time sync while players are sleeping, unless overrideSleepTime=true.\n"
                 + "respectSleep=" + respectSleep + "\n\n"
                 + "# overrideSleepTime: true keeps forcing realtime/custom time even while players are sleeping.\n"
                 + "overrideSleepTime=" + overrideSleepTime + "\n\n"
-                + "# updateInterval: ticks between time syncs. 20 ticks = 1 second. Minimum: 1.\n"
+                + "# updateInterval: ticks between time syncs. 20 ticks = 1 second. Realistic-smooth uses 20.\n"
                 + "updateInterval=" + updateInterval + "\n\n"
                 + "# offsetHours: real-time offset from server system time. Range: -23..23.\n"
                 + "offsetHours=" + offsetHours + "\n\n"
@@ -180,7 +207,7 @@ public final class RealtimeConfig {
 
     private static String normalizeSyncMode(String value, RealtimeLog logger) {
         if (value == null || value.isBlank()) {
-            return SYNC_MODE_INSTANT;
+            return SYNC_MODE_SMOOTH;
         }
 
         String normalized = value.trim().toLowerCase(Locale.ROOT);
@@ -188,7 +215,7 @@ public final class RealtimeConfig {
             return normalized;
         }
 
-        return SYNC_MODE_INSTANT;
+        return SYNC_MODE_SMOOTH;
     }
 
     private static Set<String> parseDimensionSet(String rawValue, String key, RealtimeLog logger) {

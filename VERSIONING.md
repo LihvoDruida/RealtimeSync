@@ -186,3 +186,21 @@ The shared `common` runtime supports:
 - `respectSleep` / `overrideSleepTime` sleep handling without loader-specific logic.
 
 Keep these features in `RealtimeController` and `RealtimeConfig`. Loader entrypoints must only forward lifecycle/tick callbacks and must not reimplement smooth sync, dimension filtering or sleep checks.
+
+## Realistic smooth defaults
+
+The generated `realtime.properties` file intentionally uses a realistic-smooth profile:
+
+```properties
+syncAllWorlds=false
+syncDimensions=minecraft:overworld
+syncMode=smooth
+updateInterval=20
+maxSmoothStepTicks=12
+smoothSnapThresholdTicks=2
+smoothCatchupDivisor=240
+respectSleep=true
+overrideSleepTime=false
+```
+
+Do not revert these defaults to `syncMode=instant`, `syncAllWorlds=true`, `updateInterval=60`, or `maxSmoothStepTicks=240` unless there is a specific compatibility reason. The goal is realistic sky movement: Overworld only, one-second updates, adaptive catch-up, and no sleep conflicts.

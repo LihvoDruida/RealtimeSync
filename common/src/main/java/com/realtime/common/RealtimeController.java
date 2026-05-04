@@ -125,7 +125,13 @@ public final class RealtimeController {
             }
 
             long ticksToApply = config.isSmoothSyncMode()
-                    ? timeMath.calculateSmoothTicks(level.getDayTime(), targetTicks, config.maxSmoothStepTicks)
+                    ? timeMath.calculateSmoothTicks(
+                            level.getDayTime(),
+                            targetTicks,
+                            config.maxSmoothStepTicks,
+                            config.smoothSnapThresholdTicks,
+                            config.smoothCatchupDivisor
+                    )
                     : targetTicks;
             level.setDayTime(ticksToApply);
             syncedWorlds++;

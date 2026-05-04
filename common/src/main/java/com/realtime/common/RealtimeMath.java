@@ -38,9 +38,27 @@ public final class RealtimeMath {
         return (long) customTicks;
     }
 
-    public long calculateSmoothTicks(long currentDayTime, long targetDayTime, int maxStepTicks) {
+    public long calculateSmoothTicks(long currentDayTime, long targetDayTime, int maxStepTicks, int snapThresholdTicks, int catchupDivisor) {
         long currentWrapped = Math.floorMod(currentDayTime, TICKS_PER_DAY);
         long targetWrapped = Math.floorMod(targetDayTime, TICKS_PER_DAY);
+        long delta = shortestDelta(currentWrapped, targetWrapped);
+        long absoluteDelta = Math.abs(delta);
+
+        int safeSnapThreshold = Math.max(0, snapThresholdTicks);
+        if (absoluteDelta <= safeSnapThreshold) {
+            return targetWrapped;
+        }
+
+        int safeMaxStep = Math.max(1, maxStepTicks);
+        int safeCatchupDivisor = Math.max(1, catchupDivisor);
+        long adaptiveStep = Math.max(1L, (long) Math.ceil(absoluteDelta / (double) safeCatchupDivisor));
+        long appliedMagnitude = Math.min(safeMaxStep, Math.min(absoluteDelta, adaptiveStep));
+        long appliedDelta = delta > 0 ? appliedMagnitude : -appliedMagnitude;
+
+        return Math.floorMod(currentDayTime + appliedDelta, TICKS_PER_DAY);
+    }
+
+    private long shortestDelta(long currentWrapped, long targetWrapped) {
         long delta = targetWrapped - currentWrapped;
 
         if (delta > TICKS_PER_DAY / 2L) {
@@ -49,19 +67,7 @@ public final class RealtimeMath {
             delta += TICKS_PER_DAY;
         }
 
-        int safeMaxStep = Math.max(1, maxStepTicks);
-        long appliedDelta;
-        if (Math.abs(delta) <= safeMaxStep) {
-            appliedDelta = delta;
-        } else {
-            appliedDelta = delta > 0 ? safeMaxStep : -safeMaxStep;
-        }
-
-        long result = currentDayTime + appliedDelta;
-        if (result < 0) {
-            result += TICKS_PER_DAY;
-        }
-        return result;
+        return delta;
     }
 
     public void resetCustomTicks() {
