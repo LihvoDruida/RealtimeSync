@@ -103,12 +103,21 @@ grep -q "final class RealtimeGameRules" common/src/main/java/com/realtime/common
 grep -q "cachedResolution" common/src/main/java/com/realtime/common/RealtimeGameRules.java || fail "RealtimeGameRules must cache its reflective resolver"
 grep -q "DAYLIGHT_RULE_GUARD_INTERVAL_TICKS" common/src/main/java/com/realtime/common/RealtimeController.java || fail "Daylight gamerule guard must be low-frequency, not every sync tick"
 
+grep -q "SYNC_MODE_SMOOTH" common/src/main/java/com/realtime/common/RealtimeConfig.java || fail "RealtimeConfig must support syncMode=smooth"
+grep -q "calculateSmoothTicks" common/src/main/java/com/realtime/common/RealtimeMath.java || fail "RealtimeMath must provide smooth time catch-up"
+grep -q "syncDimensions" common/src/main/java/com/realtime/common/RealtimeConfig.java || fail "RealtimeConfig must support syncDimensions allowlist"
+grep -q "ignoredDimensions" common/src/main/java/com/realtime/common/RealtimeConfig.java || fail "RealtimeConfig must support ignoredDimensions denylist"
+grep -q "shouldSyncLevel" common/src/main/java/com/realtime/common/RealtimeController.java || fail "RealtimeController must own dimension filtering"
+grep -q "respectSleep" common/src/main/java/com/realtime/common/RealtimeConfig.java || fail "RealtimeConfig must support respectSleep"
+grep -q "overrideSleepTime" common/src/main/java/com/realtime/common/RealtimeConfig.java || fail "RealtimeConfig must support overrideSleepTime"
+grep -q "shouldSkipForSleep" common/src/main/java/com/realtime/common/RealtimeController.java || fail "RealtimeController must own sleep-aware sync"
+
 for source in fabric/src/main/java/com/realtime/fabric/RealtimeFabric.java forge/src/main/java/com/realtime/forge/RealtimeForge.java neoforge/src/main/java/com/realtime/neoforge/RealtimeNeoForge.java; do
   grep -q "RealtimeController" "${source}" || fail "${source} must delegate runtime behavior to RealtimeController"
 done
 
-if grep -R "RealtimeMath\|setBooleanGameRule\|invokeBooleanRuleSetter\|findDirectGameRuleSetter" fabric/src/main/java forge/src/main/java neoforge/src/main/java -n; then
-  fail "Loader entrypoints must not duplicate common sync math or GameRules reflection"
+if grep -R "RealtimeMath\|setBooleanGameRule\|invokeBooleanRuleSetter\|findDirectGameRuleSetter\|calculateSmoothTicks\|shouldSyncLevel\|shouldSkipForSleep" fabric/src/main/java forge/src/main/java neoforge/src/main/java -n; then
+  fail "Loader entrypoints must not duplicate common sync math, dimension filtering, sleep handling or GameRules reflection"
 fi
 
 bash -n scripts/build-all-profiles.sh

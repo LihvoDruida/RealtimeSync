@@ -57,6 +57,12 @@ Example:
 enabled=true
 forceDaylightCycleOff=true
 syncAllWorlds=true
+syncDimensions=
+ignoredDimensions=
+syncMode=instant
+maxSmoothStepTicks=240
+respectSleep=true
+overrideSleepTime=false
 updateInterval=60
 offsetHours=0
 customDayLengthMinutes=0
@@ -69,18 +75,58 @@ debugLogging=false
 | --- | --- | --- |
 | `enabled` | `true` | Enables or disables the mod without removing it. |
 | `forceDaylightCycleOff` | `true` | Keeps vanilla `doDaylightCycle` disabled so the mod controls time cleanly. |
-| `syncAllWorlds` | `true` | Syncs all loaded dimensions. Set `false` to sync only the Overworld. |
+| `syncAllWorlds` | `true` | Syncs every loaded dimension when `syncDimensions` is empty. Set `false` to sync only the Overworld. |
+| `syncDimensions` | empty | Comma-separated allowlist of dimensions to sync, for example `minecraft:overworld,minecraft:the_nether`. Takes priority over `syncAllWorlds`. |
+| `ignoredDimensions` | empty | Comma-separated denylist excluded from time sync. Useful for modded/custom dimensions. |
+| `syncMode` | `instant` | `instant` jumps directly to the target time. `smooth` gradually catches up and avoids visible sun/moon jumps. |
+| `maxSmoothStepTicks` | `240` | Maximum Minecraft ticks changed per sync when `syncMode=smooth`. |
+| `respectSleep` | `true` | Skips time sync while players are sleeping so the mod does not fight sleep mechanics. |
+| `overrideSleepTime` | `false` | Forces sync even while players are sleeping. Overrides `respectSleep`. |
 | `updateInterval` | `60` | Ticks between syncs. `20` ticks = 1 second. |
 | `offsetHours` | `0` | Shifts real-time sync by `-23..23` hours. |
 | `customDayLengthMinutes` | `0` | `0` means real clock sync. Values above `0` set a custom Minecraft day length. |
 | `debugLogging` | `false` | Enables verbose sync logs. |
+
+### Smooth sync
+
+Use `syncMode=smooth` to avoid abrupt sun/moon jumps after server start, config reloads or long downtime:
+
+```properties
+syncMode=smooth
+maxSmoothStepTicks=240
+```
+
+`maxSmoothStepTicks` controls how fast the world catches up on every sync. Higher values catch up faster; lower values are more gradual.
+
+### Dimension filtering
+
+If `syncDimensions` is empty, `syncAllWorlds=true` syncs every loaded dimension and `syncAllWorlds=false` syncs only the Overworld.
+
+```properties
+syncAllWorlds=false
+syncDimensions=minecraft:overworld,minecraft:the_nether
+ignoredDimensions=some_mod:custom_dimension
+```
+
+When `syncDimensions` is set, it becomes the allowlist. `ignoredDimensions` always wins and excludes matching dimensions from sync and daylight-cycle gamerule changes.
+
+### Sleep handling
+
+By default, the mod pauses time sync while players are sleeping:
+
+```properties
+respectSleep=true
+overrideSleepTime=false
+```
+
+Set `overrideSleepTime=true` only if the server should keep enforcing realtime/custom time even during sleep.
 
 
 ### Runtime architecture
 
 RealtimeSync keeps loader entrypoints thin. Fabric, Quilt, Forge and NeoForge only connect loader lifecycle events to the shared `common` runtime:
 
-- `RealtimeController` owns config reloads, sync cadence and time application.
+- `RealtimeController` owns config reloads, sync cadence, smooth/instant time application, dimension filtering and sleep-aware sync.
 - `RealtimeGameRules` owns cross-1.21.x daylight gamerule mutation and caches the reflective lookup after the first successful resolution.
 - Loader modules should not duplicate sync math, config polling, GameRules reflection or command-based gamerule changes.
 

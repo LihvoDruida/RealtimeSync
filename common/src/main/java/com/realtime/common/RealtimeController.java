@@ -2,6 +2,8 @@ package com.realtime.common;
 
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.Level;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -10,6 +12,7 @@ import java.nio.file.Path;
 public final class RealtimeController {
     private static final int CONFIG_RELOAD_CHECK_INTERVAL_TICKS = 100;
     private static final int DAYLIGHT_RULE_GUARD_INTERVAL_TICKS = 20 * 60;
+    private static final String OVERWORLD_DIMENSION_ID = "minecraft:overworld";
 
     private final RealtimeLog logger;
     private final Path configPath;
@@ -22,6 +25,7 @@ public final class RealtimeController {
     private int tickCounter = 0;
     private int configReloadTickCounter = 0;
     private int daylightRuleGuardTickCounter = 0;
+    private boolean sleepSkipLogged = false;
 
     public RealtimeController(Path configDir, RealtimeLog logger) {
         this.logger = logger;
@@ -76,15 +80,18 @@ public final class RealtimeController {
         }
 
         try {
-            long ticks = config.customDayLengthMinutes > 0
+            long targetTicks = config.customDayLengthMinutes > 0
                     ? timeMath.calculateCustomTicks(readOverworldTime(server), config.updateInterval, config.customDayLengthMinutes)
                     : timeMath.calculateRealtimeTicks(config.offsetHours);
 
-            applyTime(server, ticks);
+            int syncedWorlds = applyTime(server, targetTicks);
 
             if (config.debugLogging) {
-                logger.info("Synced world time to {} ticks. Mode: {}.", ticks,
-                        config.customDayLengthMinutes > 0 ? "custom-day-length" : "real-time");
+                logger.info("Synced {} world(s) toward {} ticks. Mode: {}, syncMode: {}.",
+                        syncedWorlds,
+                        targetTicks,
+                        config.customDayLengthMinutes > 0 ? "custom-day-length" : "real-time",
+                        config.syncMode);
             }
         } catch (RuntimeException exception) {
             logger.error("Failed to synchronize Minecraft time.", exception);
@@ -95,19 +102,69 @@ public final class RealtimeController {
         return server.overworld().getDayTime();
     }
 
-    private void applyTime(MinecraftServer server, long ticks) {
-        if (config.syncAllWorlds) {
-            for (ServerLevel level : server.getAllLevels()) {
-                level.setDayTime(ticks);
+    private int applyTime(MinecraftServer server, long targetTicks) {
+        int syncedWorlds = 0;
+        for (ServerLevel level : server.getAllLevels()) {
+            if (!shouldSyncLevel(level)) {
+                continue;
             }
-            return;
+            if (shouldSkipForSleep(server, level)) {
+                continue;
+            }
+
+            long ticksToApply = config.isSmoothSyncMode()
+                    ? timeMath.calculateSmoothTicks(level.getDayTime(), targetTicks, config.maxSmoothStepTicks)
+                    : targetTicks;
+            level.setDayTime(ticksToApply);
+            syncedWorlds++;
+        }
+        return syncedWorlds;
+    }
+
+    private boolean shouldSyncLevel(ServerLevel level) {
+        String dimensionId = dimensionId(level);
+        if (config.ignoredDimensionSet().contains(dimensionId)) {
+            return false;
+        }
+        if (!config.syncDimensionSet().isEmpty()) {
+            return config.syncDimensionSet().contains(dimensionId);
+        }
+        if (config.syncAllWorlds) {
+            return true;
+        }
+        return OVERWORLD_DIMENSION_ID.equals(dimensionId);
+    }
+
+    private String dimensionId(ServerLevel level) {
+        try {
+            return level.dimension().location().toString().toLowerCase();
+        } catch (RuntimeException exception) {
+            return level.dimension().equals(Level.OVERWORLD) ? OVERWORLD_DIMENSION_ID : level.dimension().toString().toLowerCase();
+        }
+    }
+
+    private boolean shouldSkipForSleep(MinecraftServer server, ServerLevel level) {
+        if (!config.respectSleep || config.overrideSleepTime) {
+            sleepSkipLogged = false;
+            return false;
         }
 
-        server.overworld().setDayTime(ticks);
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            if (player.level() == level && player.isSleeping()) {
+                if (config.debugLogging && !sleepSkipLogged) {
+                    logger.info("Skipping time sync while players are sleeping. Set overrideSleepTime=true to force sync during sleep.");
+                }
+                sleepSkipLogged = true;
+                return true;
+            }
+        }
+
+        sleepSkipLogged = false;
+        return false;
     }
 
     private void ensureDaylightCycleOff(ServerLevel level, MinecraftServer server) {
-        if (!config.enabled || !config.forceDaylightCycleOff) {
+        if (!config.enabled || !config.forceDaylightCycleOff || !shouldSyncLevel(level)) {
             return;
         }
 
@@ -127,7 +184,11 @@ public final class RealtimeController {
         }
 
         daylightRuleGuardTickCounter = 0;
-        gameRules.disableDaylightCycle(server);
+        for (ServerLevel level : server.getAllLevels()) {
+            if (shouldSyncLevel(level)) {
+                gameRules.disableDaylightCycle(level, server);
+            }
+        }
     }
 
     private boolean checkConfigReload() {
@@ -150,6 +211,7 @@ public final class RealtimeController {
         configLastModified = readModifiedTime(configPath);
         tickCounter = Math.min(tickCounter, Math.max(0, config.updateInterval - 1));
         daylightRuleGuardTickCounter = DAYLIGHT_RULE_GUARD_INTERVAL_TICKS;
+        sleepSkipLogged = false;
         timeMath.resetCustomTicks();
         gameRules.resetWarningState();
 

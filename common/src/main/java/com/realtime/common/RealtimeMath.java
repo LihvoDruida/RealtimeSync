@@ -38,6 +38,32 @@ public final class RealtimeMath {
         return (long) customTicks;
     }
 
+    public long calculateSmoothTicks(long currentDayTime, long targetDayTime, int maxStepTicks) {
+        long currentWrapped = Math.floorMod(currentDayTime, TICKS_PER_DAY);
+        long targetWrapped = Math.floorMod(targetDayTime, TICKS_PER_DAY);
+        long delta = targetWrapped - currentWrapped;
+
+        if (delta > TICKS_PER_DAY / 2L) {
+            delta -= TICKS_PER_DAY;
+        } else if (delta < -TICKS_PER_DAY / 2L) {
+            delta += TICKS_PER_DAY;
+        }
+
+        int safeMaxStep = Math.max(1, maxStepTicks);
+        long appliedDelta;
+        if (Math.abs(delta) <= safeMaxStep) {
+            appliedDelta = delta;
+        } else {
+            appliedDelta = delta > 0 ? safeMaxStep : -safeMaxStep;
+        }
+
+        long result = currentDayTime + appliedDelta;
+        if (result < 0) {
+            result += TICKS_PER_DAY;
+        }
+        return result;
+    }
+
     public void resetCustomTicks() {
         customTicksInitialized = false;
     }

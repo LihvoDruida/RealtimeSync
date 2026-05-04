@@ -155,3 +155,13 @@ Shared runtime behavior lives in `common/src/main/java/com/realtime/common`:
 - Loader entrypoints should stay thin and must not duplicate config polling, GameRules reflection or time-sync math.
 
 Do not reintroduce command-based gamerule changes such as `/gamerule doDaylightCycle false`; Minecraft 1.21.11 renamed daylight-cycle behavior and command syntax can spam runtime logs.
+
+## Runtime feature notes
+
+The shared `common` runtime supports:
+
+- `syncMode=instant` and `syncMode=smooth` across all loader entrypoints.
+- `syncDimensions` allowlists and `ignoredDimensions` denylists using full dimension ids such as `minecraft:overworld`.
+- `respectSleep` / `overrideSleepTime` sleep handling without loader-specific logic.
+
+Keep these features in `RealtimeController` and `RealtimeConfig`. Loader entrypoints must only forward lifecycle/tick callbacks and must not reimplement smooth sync, dimension filtering or sleep checks.
