@@ -105,7 +105,7 @@ public final class RealtimeController {
     }
 
     private long readOverworldTime(MinecraftServer server) {
-        return server.overworld().getDayTime();
+        return RealtimeWorldTime.readOverworldTime(server);
     }
 
     private int applyTime(MinecraftServer server, long targetTicks) {
@@ -126,14 +126,14 @@ public final class RealtimeController {
 
             long ticksToApply = config.isSmoothSyncMode()
                     ? timeMath.calculateSmoothTicks(
-                            level.getDayTime(),
+                            RealtimeWorldTime.readDayTime(level),
                             targetTicks,
                             config.maxSmoothStepTicks,
                             config.smoothSnapThresholdTicks,
                             config.smoothCatchupDivisor
                     )
                     : targetTicks;
-            level.setDayTime(ticksToApply);
+            RealtimeWorldTime.setDayTime(level, ticksToApply);
             syncedWorlds++;
         }
 

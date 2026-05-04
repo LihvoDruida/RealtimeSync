@@ -150,6 +150,16 @@ if grep -nE '^fabric_version=0\.\+$' gradle.properties buildProfiles/*.propertie
   fail "Fabric API versions must be exact per profile; dynamic 0.+ makes releases non-reproducible"
 fi
 
+
+# Minecraft 26.1.x removed the ServerLevel day-time convenience methods from the mapped API.
+# Use RealtimeWorldTime + level data accessors so all 1.21.x and 26.1.x profiles compile.
+grep -q "final class RealtimeWorldTime" common/src/main/java/com/realtime/common/RealtimeWorldTime.java || fail "Common world time compatibility helper is missing"
+grep -q "getLevelData().getDayTime()" common/src/main/java/com/realtime/common/RealtimeWorldTime.java || fail "RealtimeWorldTime must read through level data for 26.1.x compatibility"
+grep -q "getLevelData().setDayTime" common/src/main/java/com/realtime/common/RealtimeWorldTime.java || fail "RealtimeWorldTime must write through level data for 26.1.x compatibility"
+if grep -R "overworld()\.getDayTime()\|level\.getDayTime()\|level\.setDayTime(" common/src/main/java/com/realtime/common/RealtimeController.java fabric/src/main/java forge/src/main/java neoforge/src/main/java -n; then
+  fail "Loader/common controller code must not call ServerLevel getDayTime/setDayTime directly; use RealtimeWorldTime"
+fi
+
 grep -q "final class RealtimeController" common/src/main/java/com/realtime/common/RealtimeController.java || fail "Common runtime controller is missing"
 grep -q "final class RealtimeGameRules" common/src/main/java/com/realtime/common/RealtimeGameRules.java || fail "Common GameRules helper is missing"
 grep -q "cachedResolution" common/src/main/java/com/realtime/common/RealtimeGameRules.java || fail "RealtimeGameRules must cache its reflective resolver"

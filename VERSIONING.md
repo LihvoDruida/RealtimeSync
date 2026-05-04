@@ -240,3 +240,7 @@ Important rules:
 - Forge `1.21.10` is pinned to `60.1.0` instead of latest `60.1.9`, because `60.1.9` can fail in ForgeGradle Mavenizer on GitHub-hosted runners.
 - Minecraft `26.1.x` profiles use Java 25 and exact Fabric/Forge/NeoForge artifacts.
 
+
+### Minecraft 26.1.x time API compatibility
+
+Minecraft 26.1.x no longer exposes the same `ServerLevel#getDayTime()` / `ServerLevel#setDayTime(...)` convenience methods in the mapped API used by every loader build. RealtimeSync reads and writes day time through the level data compatibility helper (`RealtimeWorldTime`) so the same common runtime compiles for both `1.21.x` and `26.1.x`.
