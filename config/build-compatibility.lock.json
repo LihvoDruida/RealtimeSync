@@ -1,0 +1,634 @@
+{
+  "schema": 1,
+  "generatedBy": "RealtimeSync compatibility lock",
+  "policy": {
+    "versioning": "Every active Minecraft profile pins exact loader dependency versions. Wildcards are forbidden for runtime build dependencies.",
+    "java": "1.21.x uses Java 21; 26.1.x uses Java 25.",
+    "ci": "CI builds only combinations marked supported=true in this lock and mirrored by buildProfiles/*.properties."
+  },
+  "loaders": [
+    "fabric",
+    "quilt",
+    "forge",
+    "neoforge"
+  ],
+  "profileOrder": [
+    "1.21",
+    "1.21.1",
+    "1.21.2",
+    "1.21.3",
+    "1.21.4",
+    "1.21.5",
+    "1.21.6",
+    "1.21.7",
+    "1.21.8",
+    "1.21.9",
+    "1.21.10",
+    "1.21.11",
+    "26.1",
+    "26.1.1",
+    "26.1.2"
+  ],
+  "profiles": {
+    "1.21": {
+      "minecraftVersion": "1.21",
+      "nextMinecraftVersion": "1.21.1",
+      "javaVersion": 21,
+      "fabricLoader": "0.18.4",
+      "fabricApi": "0.102.0+1.21",
+      "loaders": {
+        "fabric": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.102.0+1.21",
+          "notes": "Fabric-compatible build using Fabric Loader and Fabric API."
+        },
+        "quilt": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.102.0+1.21",
+          "notes": "Quilt-compatible artifact reusing Fabric entrypoint and Fabric API."
+        },
+        "forge": {
+          "supported": true,
+          "version": "51.0.33",
+          "loaderRange": "[51,)",
+          "artifact": "net.minecraftforge:forge:1.21-51.0.33",
+          "notes": "ForgeGradle 7 userdev build."
+        },
+        "neoforge": {
+          "supported": true,
+          "version": "21.0.160",
+          "loaderRange": "[21.0,)",
+          "versionRange": "[21.0,)",
+          "artifact": "net.neoforged:neoforge:21.0.160",
+          "notes": "NeoForge ModDev build with exact version pin."
+        }
+      },
+      "compatibilityGuards": {
+        "timeAccess": "reflective ServerLevel/LevelData day-time accessor",
+        "gamerules": "reflective daylight gamerule resolver",
+        "dimensions": "reflective dimension key normalization",
+        "serverTicks": "reflective tick de-duplication for per-level events"
+      }
+    },
+    "1.21.1": {
+      "minecraftVersion": "1.21.1",
+      "nextMinecraftVersion": "1.21.2",
+      "javaVersion": 21,
+      "fabricLoader": "0.18.4",
+      "fabricApi": "0.116.6+1.21.1",
+      "loaders": {
+        "fabric": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.116.6+1.21.1",
+          "notes": "Fabric-compatible build using Fabric Loader and Fabric API."
+        },
+        "quilt": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.116.6+1.21.1",
+          "notes": "Quilt-compatible artifact reusing Fabric entrypoint and Fabric API."
+        },
+        "forge": {
+          "supported": true,
+          "version": "52.1.14",
+          "loaderRange": "[52,)",
+          "artifact": "net.minecraftforge:forge:1.21.1-52.1.14",
+          "notes": "ForgeGradle 7 userdev build."
+        },
+        "neoforge": {
+          "supported": true,
+          "version": "21.1.172",
+          "loaderRange": "[21.1,)",
+          "versionRange": "[21.1,)",
+          "artifact": "net.neoforged:neoforge:21.1.172",
+          "notes": "NeoForge ModDev build with exact version pin."
+        }
+      },
+      "compatibilityGuards": {
+        "timeAccess": "reflective ServerLevel/LevelData day-time accessor",
+        "gamerules": "reflective daylight gamerule resolver",
+        "dimensions": "reflective dimension key normalization",
+        "serverTicks": "reflective tick de-duplication for per-level events"
+      }
+    },
+    "1.21.2": {
+      "minecraftVersion": "1.21.2",
+      "nextMinecraftVersion": "1.21.3",
+      "javaVersion": 21,
+      "fabricLoader": "0.18.4",
+      "fabricApi": "0.106.1+1.21.2",
+      "loaders": {
+        "fabric": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.106.1+1.21.2",
+          "notes": "Fabric-compatible build using Fabric Loader and Fabric API."
+        },
+        "quilt": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.106.1+1.21.2",
+          "notes": "Quilt-compatible artifact reusing Fabric entrypoint and Fabric API."
+        },
+        "forge": {
+          "supported": false,
+          "version": "unsupported",
+          "loaderRange": "[53,)",
+          "artifact": null,
+          "notes": "Disabled: no official Forge artifact is available for this Minecraft version."
+        },
+        "neoforge": {
+          "supported": true,
+          "version": "21.2.0-beta",
+          "loaderRange": "[21.2,)",
+          "versionRange": "[21.2,)",
+          "artifact": "net.neoforged:neoforge:21.2.0-beta",
+          "notes": "NeoForge ModDev build with exact version pin."
+        }
+      },
+      "compatibilityGuards": {
+        "timeAccess": "reflective ServerLevel/LevelData day-time accessor",
+        "gamerules": "reflective daylight gamerule resolver",
+        "dimensions": "reflective dimension key normalization",
+        "serverTicks": "reflective tick de-duplication for per-level events"
+      }
+    },
+    "1.21.3": {
+      "minecraftVersion": "1.21.3",
+      "nextMinecraftVersion": "1.21.4",
+      "javaVersion": 21,
+      "fabricLoader": "0.18.4",
+      "fabricApi": "0.108.0+1.21.3",
+      "loaders": {
+        "fabric": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.108.0+1.21.3",
+          "notes": "Fabric-compatible build using Fabric Loader and Fabric API."
+        },
+        "quilt": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.108.0+1.21.3",
+          "notes": "Quilt-compatible artifact reusing Fabric entrypoint and Fabric API."
+        },
+        "forge": {
+          "supported": true,
+          "version": "53.1.10",
+          "loaderRange": "[53,)",
+          "artifact": "net.minecraftforge:forge:1.21.3-53.1.10",
+          "notes": "ForgeGradle 7 userdev build."
+        },
+        "neoforge": {
+          "supported": true,
+          "version": "21.3.87",
+          "loaderRange": "[21.3,)",
+          "versionRange": "[21.3,)",
+          "artifact": "net.neoforged:neoforge:21.3.87",
+          "notes": "NeoForge ModDev build with exact version pin."
+        }
+      },
+      "compatibilityGuards": {
+        "timeAccess": "reflective ServerLevel/LevelData day-time accessor",
+        "gamerules": "reflective daylight gamerule resolver",
+        "dimensions": "reflective dimension key normalization",
+        "serverTicks": "reflective tick de-duplication for per-level events"
+      }
+    },
+    "1.21.4": {
+      "minecraftVersion": "1.21.4",
+      "nextMinecraftVersion": "1.21.5",
+      "javaVersion": 21,
+      "fabricLoader": "0.18.4",
+      "fabricApi": "0.119.4+1.21.4",
+      "loaders": {
+        "fabric": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.119.4+1.21.4",
+          "notes": "Fabric-compatible build using Fabric Loader and Fabric API."
+        },
+        "quilt": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.119.4+1.21.4",
+          "notes": "Quilt-compatible artifact reusing Fabric entrypoint and Fabric API."
+        },
+        "forge": {
+          "supported": true,
+          "version": "54.1.16",
+          "loaderRange": "[54,)",
+          "artifact": "net.minecraftforge:forge:1.21.4-54.1.16",
+          "notes": "ForgeGradle 7 userdev build."
+        },
+        "neoforge": {
+          "supported": true,
+          "version": "21.4.147",
+          "loaderRange": "[21.4,)",
+          "versionRange": "[21.4,)",
+          "artifact": "net.neoforged:neoforge:21.4.147",
+          "notes": "NeoForge ModDev build with exact version pin."
+        }
+      },
+      "compatibilityGuards": {
+        "timeAccess": "reflective ServerLevel/LevelData day-time accessor",
+        "gamerules": "reflective daylight gamerule resolver",
+        "dimensions": "reflective dimension key normalization",
+        "serverTicks": "reflective tick de-duplication for per-level events"
+      }
+    },
+    "1.21.5": {
+      "minecraftVersion": "1.21.5",
+      "nextMinecraftVersion": "1.21.6",
+      "javaVersion": 21,
+      "fabricLoader": "0.18.4",
+      "fabricApi": "0.128.2+1.21.5",
+      "loaders": {
+        "fabric": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.128.2+1.21.5",
+          "notes": "Fabric-compatible build using Fabric Loader and Fabric API."
+        },
+        "quilt": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.128.2+1.21.5",
+          "notes": "Quilt-compatible artifact reusing Fabric entrypoint and Fabric API."
+        },
+        "forge": {
+          "supported": true,
+          "version": "55.1.10",
+          "loaderRange": "[55,)",
+          "artifact": "net.minecraftforge:forge:1.21.5-55.1.10",
+          "notes": "ForgeGradle 7 userdev build."
+        },
+        "neoforge": {
+          "supported": true,
+          "version": "21.5.95",
+          "loaderRange": "[21.5,)",
+          "versionRange": "[21.5,)",
+          "artifact": "net.neoforged:neoforge:21.5.95",
+          "notes": "NeoForge ModDev build with exact version pin."
+        }
+      },
+      "compatibilityGuards": {
+        "timeAccess": "reflective ServerLevel/LevelData day-time accessor",
+        "gamerules": "reflective daylight gamerule resolver",
+        "dimensions": "reflective dimension key normalization",
+        "serverTicks": "reflective tick de-duplication for per-level events"
+      }
+    },
+    "1.21.6": {
+      "minecraftVersion": "1.21.6",
+      "nextMinecraftVersion": "1.21.7",
+      "javaVersion": 21,
+      "fabricLoader": "0.18.4",
+      "fabricApi": "0.128.2+1.21.6",
+      "loaders": {
+        "fabric": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.128.2+1.21.6",
+          "notes": "Fabric-compatible build using Fabric Loader and Fabric API."
+        },
+        "quilt": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.128.2+1.21.6",
+          "notes": "Quilt-compatible artifact reusing Fabric entrypoint and Fabric API."
+        },
+        "forge": {
+          "supported": true,
+          "version": "56.0.9",
+          "loaderRange": "[56,)",
+          "artifact": "net.minecraftforge:forge:1.21.6-56.0.9",
+          "notes": "ForgeGradle 7 userdev build."
+        },
+        "neoforge": {
+          "supported": true,
+          "version": "21.6.16-beta",
+          "loaderRange": "[21.6,)",
+          "versionRange": "[21.6,)",
+          "artifact": "net.neoforged:neoforge:21.6.16-beta",
+          "notes": "NeoForge ModDev build with exact version pin."
+        }
+      },
+      "compatibilityGuards": {
+        "timeAccess": "reflective ServerLevel/LevelData day-time accessor",
+        "gamerules": "reflective daylight gamerule resolver",
+        "dimensions": "reflective dimension key normalization",
+        "serverTicks": "reflective tick de-duplication for per-level events"
+      }
+    },
+    "1.21.7": {
+      "minecraftVersion": "1.21.7",
+      "nextMinecraftVersion": "1.21.8",
+      "javaVersion": 21,
+      "fabricLoader": "0.18.4",
+      "fabricApi": "0.128.2+1.21.7",
+      "loaders": {
+        "fabric": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.128.2+1.21.7",
+          "notes": "Fabric-compatible build using Fabric Loader and Fabric API."
+        },
+        "quilt": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.128.2+1.21.7",
+          "notes": "Quilt-compatible artifact reusing Fabric entrypoint and Fabric API."
+        },
+        "forge": {
+          "supported": true,
+          "version": "57.0.3",
+          "loaderRange": "[57,)",
+          "artifact": "net.minecraftforge:forge:1.21.7-57.0.3",
+          "notes": "ForgeGradle 7 userdev build."
+        },
+        "neoforge": {
+          "supported": true,
+          "version": "21.7.20-beta",
+          "loaderRange": "[21.7,)",
+          "versionRange": "[21.7,)",
+          "artifact": "net.neoforged:neoforge:21.7.20-beta",
+          "notes": "NeoForge ModDev build with exact version pin."
+        }
+      },
+      "compatibilityGuards": {
+        "timeAccess": "reflective ServerLevel/LevelData day-time accessor",
+        "gamerules": "reflective daylight gamerule resolver",
+        "dimensions": "reflective dimension key normalization",
+        "serverTicks": "reflective tick de-duplication for per-level events"
+      }
+    },
+    "1.21.8": {
+      "minecraftVersion": "1.21.8",
+      "nextMinecraftVersion": "1.21.9",
+      "javaVersion": 21,
+      "fabricLoader": "0.18.4",
+      "fabricApi": "0.130.0+1.21.8",
+      "loaders": {
+        "fabric": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.130.0+1.21.8",
+          "notes": "Fabric-compatible build using Fabric Loader and Fabric API."
+        },
+        "quilt": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.130.0+1.21.8",
+          "notes": "Quilt-compatible artifact reusing Fabric entrypoint and Fabric API."
+        },
+        "forge": {
+          "supported": true,
+          "version": "58.1.18",
+          "loaderRange": "[58,)",
+          "artifact": "net.minecraftforge:forge:1.21.8-58.1.18",
+          "notes": "ForgeGradle 7 userdev build."
+        },
+        "neoforge": {
+          "supported": true,
+          "version": "21.8.39",
+          "loaderRange": "[21.8,)",
+          "versionRange": "[21.8,)",
+          "artifact": "net.neoforged:neoforge:21.8.39",
+          "notes": "NeoForge ModDev build with exact version pin."
+        }
+      },
+      "compatibilityGuards": {
+        "timeAccess": "reflective ServerLevel/LevelData day-time accessor",
+        "gamerules": "reflective daylight gamerule resolver",
+        "dimensions": "reflective dimension key normalization",
+        "serverTicks": "reflective tick de-duplication for per-level events"
+      }
+    },
+    "1.21.9": {
+      "minecraftVersion": "1.21.9",
+      "nextMinecraftVersion": "1.21.10",
+      "javaVersion": 21,
+      "fabricLoader": "0.18.4",
+      "fabricApi": "0.134.1+1.21.9",
+      "loaders": {
+        "fabric": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.134.1+1.21.9",
+          "notes": "Fabric-compatible build using Fabric Loader and Fabric API."
+        },
+        "quilt": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.134.1+1.21.9",
+          "notes": "Quilt-compatible artifact reusing Fabric entrypoint and Fabric API."
+        },
+        "forge": {
+          "supported": true,
+          "version": "59.0.5",
+          "loaderRange": "[59,)",
+          "artifact": "net.minecraftforge:forge:1.21.9-59.0.5",
+          "notes": "ForgeGradle 7 userdev build."
+        },
+        "neoforge": {
+          "supported": true,
+          "version": "21.9.9-beta",
+          "loaderRange": "[21.9,)",
+          "versionRange": "[21.9,)",
+          "artifact": "net.neoforged:neoforge:21.9.9-beta",
+          "notes": "NeoForge ModDev build with exact version pin."
+        }
+      },
+      "compatibilityGuards": {
+        "timeAccess": "reflective ServerLevel/LevelData day-time accessor",
+        "gamerules": "reflective daylight gamerule resolver",
+        "dimensions": "reflective dimension key normalization",
+        "serverTicks": "reflective tick de-duplication for per-level events"
+      }
+    },
+    "1.21.10": {
+      "minecraftVersion": "1.21.10",
+      "nextMinecraftVersion": "1.21.11",
+      "javaVersion": 21,
+      "fabricLoader": "0.18.4",
+      "fabricApi": "0.138.4+1.21.10",
+      "loaders": {
+        "fabric": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.138.4+1.21.10",
+          "notes": "Fabric-compatible build using Fabric Loader and Fabric API."
+        },
+        "quilt": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.138.4+1.21.10",
+          "notes": "Quilt-compatible artifact reusing Fabric entrypoint and Fabric API."
+        },
+        "forge": {
+          "supported": true,
+          "version": "60.1.0",
+          "loaderRange": "[60,)",
+          "artifact": "net.minecraftforge:forge:1.21.10-60.1.0",
+          "notes": "Forge 1.21.10 intentionally uses recommended 60.1.0; latest 60.1.9 can fail ForgeGradle Mavenizer on hosted runners."
+        },
+        "neoforge": {
+          "supported": true,
+          "version": "21.10.48-beta",
+          "loaderRange": "[21.10,)",
+          "versionRange": "[21.10,)",
+          "artifact": "net.neoforged:neoforge:21.10.48-beta",
+          "notes": "NeoForge ModDev build with exact version pin."
+        }
+      },
+      "compatibilityGuards": {
+        "timeAccess": "reflective ServerLevel/LevelData day-time accessor",
+        "gamerules": "reflective daylight gamerule resolver",
+        "dimensions": "reflective dimension key normalization",
+        "serverTicks": "reflective tick de-duplication for per-level events"
+      }
+    },
+    "1.21.11": {
+      "minecraftVersion": "1.21.11",
+      "nextMinecraftVersion": "1.21.12",
+      "javaVersion": 21,
+      "fabricLoader": "0.18.4",
+      "fabricApi": "0.141.3+1.21.11",
+      "loaders": {
+        "fabric": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.141.3+1.21.11",
+          "notes": "Fabric-compatible build using Fabric Loader and Fabric API."
+        },
+        "quilt": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.141.3+1.21.11",
+          "notes": "Quilt-compatible artifact reusing Fabric entrypoint and Fabric API."
+        },
+        "forge": {
+          "supported": true,
+          "version": "61.1.5",
+          "loaderRange": "[61,)",
+          "artifact": "net.minecraftforge:forge:1.21.11-61.1.5",
+          "notes": "ForgeGradle 7 userdev build."
+        },
+        "neoforge": {
+          "supported": true,
+          "version": "21.11.0-beta",
+          "loaderRange": "[21.11,)",
+          "versionRange": "[21.11,)",
+          "artifact": "net.neoforged:neoforge:21.11.0-beta",
+          "notes": "NeoForge ModDev build with exact version pin."
+        }
+      },
+      "compatibilityGuards": {
+        "timeAccess": "reflective ServerLevel/LevelData day-time accessor",
+        "gamerules": "reflective daylight gamerule resolver",
+        "dimensions": "reflective dimension key normalization",
+        "serverTicks": "reflective tick de-duplication for per-level events"
+      }
+    },
+    "26.1": {
+      "minecraftVersion": "26.1",
+      "nextMinecraftVersion": "26.1.1",
+      "javaVersion": 25,
+      "fabricLoader": "0.18.4",
+      "fabricApi": "0.145.1+26.1",
+      "loaders": {
+        "fabric": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.145.1+26.1",
+          "notes": "Fabric-compatible build using Fabric Loader and Fabric API."
+        },
+        "quilt": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.145.1+26.1",
+          "notes": "Quilt-compatible artifact reusing Fabric entrypoint and Fabric API."
+        },
+        "forge": {
+          "supported": true,
+          "version": "62.0.9",
+          "loaderRange": "[62,)",
+          "artifact": "net.minecraftforge:forge:26.1-62.0.9",
+          "notes": "ForgeGradle 7 userdev build."
+        },
+        "neoforge": {
+          "supported": true,
+          "version": "26.1.0.19-beta",
+          "loaderRange": "[1,)",
+          "versionRange": "[26.1,)",
+          "artifact": "net.neoforged:neoforge:26.1.0.19-beta",
+          "notes": "NeoForge ModDev build with exact version pin."
+        }
+      },
+      "compatibilityGuards": {
+        "timeAccess": "reflective ServerLevel/LevelData day-time accessor",
+        "gamerules": "reflective daylight gamerule resolver",
+        "dimensions": "reflective dimension key normalization",
+        "serverTicks": "reflective tick de-duplication for per-level events"
+      }
+    },
+    "26.1.1": {
+      "minecraftVersion": "26.1.1",
+      "nextMinecraftVersion": "26.1.2",
+      "javaVersion": 25,
+      "fabricLoader": "0.18.4",
+      "fabricApi": "0.145.4+26.1.1",
+      "loaders": {
+        "fabric": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.145.4+26.1.1",
+          "notes": "Fabric-compatible build using Fabric Loader and Fabric API."
+        },
+        "quilt": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.145.4+26.1.1",
+          "notes": "Quilt-compatible artifact reusing Fabric entrypoint and Fabric API."
+        },
+        "forge": {
+          "supported": true,
+          "version": "63.0.2",
+          "loaderRange": "[63,)",
+          "artifact": "net.minecraftforge:forge:26.1.1-63.0.2",
+          "notes": "ForgeGradle 7 userdev build."
+        },
+        "neoforge": {
+          "supported": true,
+          "version": "26.1.1.15-beta",
+          "loaderRange": "[1,)",
+          "versionRange": "[26.1.1,)",
+          "artifact": "net.neoforged:neoforge:26.1.1.15-beta",
+          "notes": "NeoForge ModDev build with exact version pin."
+        }
+      },
+      "compatibilityGuards": {
+        "timeAccess": "reflective ServerLevel/LevelData day-time accessor",
+        "gamerules": "reflective daylight gamerule resolver",
+        "dimensions": "reflective dimension key normalization",
+        "serverTicks": "reflective tick de-duplication for per-level events"
+      }
+    },
+    "26.1.2": {
+      "minecraftVersion": "26.1.2",
+      "nextMinecraftVersion": "26.1.3",
+      "javaVersion": 25,
+      "fabricLoader": "0.18.4",
+      "fabricApi": "0.148.0+26.1.2",
+      "loaders": {
+        "fabric": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.148.0+26.1.2",
+          "notes": "Fabric-compatible build using Fabric Loader and Fabric API."
+        },
+        "quilt": {
+          "supported": true,
+          "artifact": "net.fabricmc.fabric-api:fabric-api:0.148.0+26.1.2",
+          "notes": "Quilt-compatible artifact reusing Fabric entrypoint and Fabric API."
+        },
+        "forge": {
+          "supported": true,
+          "version": "64.0.7",
+          "loaderRange": "[64,)",
+          "artifact": "net.minecraftforge:forge:26.1.2-64.0.7",
+          "notes": "ForgeGradle 7 userdev build."
+        },
+        "neoforge": {
+          "supported": true,
+          "version": "26.1.2.36-beta",
+          "loaderRange": "[1,)",
+          "versionRange": "[26.1.2,)",
+          "artifact": "net.neoforged:neoforge:26.1.2.36-beta",
+          "notes": "NeoForge ModDev build with exact version pin."
+        }
+      },
+      "compatibilityGuards": {
+        "timeAccess": "reflective ServerLevel/LevelData day-time accessor",
+        "gamerules": "reflective daylight gamerule resolver",
+        "dimensions": "reflective dimension key normalization",
+        "serverTicks": "reflective tick de-duplication for per-level events"
+      }
+    }
+  }
+}

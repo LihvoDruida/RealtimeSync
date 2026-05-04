@@ -52,7 +52,10 @@ public final class RealtimeGameRules {
     }
 
     private boolean setDaylightCycle(ServerLevel level, MinecraftServer server, boolean value) {
-        Object gameRules = level.getGameRules();
+        Object gameRules = RealtimeWorldAccess.gameRules(level);
+        if (gameRules == null) {
+            return false;
+        }
 
         if (cachedResolution != null && cachedResolution.trySet(gameRules, server, value)) {
             return true;

@@ -3,21 +3,17 @@ package com.realtime.common;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.Level;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;
-import java.util.Locale;
 import java.util.Set;
 
 public final class RealtimeController {
     private static final int CONFIG_RELOAD_CHECK_INTERVAL_TICKS = 100;
     private static final int DAYLIGHT_RULE_GUARD_INTERVAL_TICKS = 20 * 60;
     private static final String OVERWORLD_DIMENSION_ID = "minecraft:overworld";
-    private static final String NETHER_DIMENSION_ID = "minecraft:the_nether";
-    private static final String END_DIMENSION_ID = "minecraft:the_end";
 
     private final RealtimeLog logger;
     private final Path configPath;
@@ -31,6 +27,7 @@ public final class RealtimeController {
     private int configReloadTickCounter = 0;
     private int daylightRuleGuardTickCounter = 0;
     private boolean sleepSkipLogged = false;
+    private long lastProcessedServerTick = RealtimeServerState.UNKNOWN_TICK;
 
     public RealtimeController(Path configDir, RealtimeLog logger) {
         this.logger = logger;
@@ -60,6 +57,10 @@ public final class RealtimeController {
     }
 
     public void onServerTick(MinecraftServer server) {
+        if (!markServerTick(server)) {
+            return;
+        }
+
         boolean reloaded = checkConfigReload();
         if (reloaded) {
             ensureDaylightCycleOff(server, true);
@@ -160,34 +161,7 @@ public final class RealtimeController {
     }
 
     private String dimensionId(ServerLevel level) {
-        Object dimensionKey = level.dimension();
-        if (Level.OVERWORLD.equals(dimensionKey)) {
-            return OVERWORLD_DIMENSION_ID;
-        }
-        if (Level.NETHER.equals(dimensionKey)) {
-            return NETHER_DIMENSION_ID;
-        }
-        if (Level.END.equals(dimensionKey)) {
-            return END_DIMENSION_ID;
-        }
-        return normalizeDimensionId(String.valueOf(dimensionKey));
-    }
-
-    private String normalizeDimensionId(String raw) {
-        String normalized = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
-        int registrySeparator = normalized.lastIndexOf(" / ");
-        if (registrySeparator >= 0) {
-            normalized = normalized.substring(registrySeparator + 3);
-        } else {
-            int bracket = normalized.lastIndexOf('[');
-            if (bracket >= 0 && bracket + 1 < normalized.length()) {
-                normalized = normalized.substring(bracket + 1);
-            }
-        }
-        if (normalized.endsWith("]")) {
-            normalized = normalized.substring(0, normalized.length() - 1);
-        }
-        return normalized;
+        return RealtimeWorldTime.dimensionId(level);
     }
 
     private Set<String> sleepingDimensionIds(MinecraftServer server) {
@@ -234,6 +208,21 @@ public final class RealtimeController {
         }
     }
 
+
+    private boolean markServerTick(MinecraftServer server) {
+        long serverTick = RealtimeServerState.tickCount(server);
+        if (serverTick == RealtimeServerState.UNKNOWN_TICK) {
+            return true;
+        }
+
+        if (serverTick == lastProcessedServerTick) {
+            return false;
+        }
+
+        lastProcessedServerTick = serverTick;
+        return true;
+    }
+
     private boolean checkConfigReload() {
         configReloadTickCounter++;
         if (configReloadTickCounter < CONFIG_RELOAD_CHECK_INTERVAL_TICKS) {
@@ -255,6 +244,7 @@ public final class RealtimeController {
         tickCounter = Math.min(tickCounter, Math.max(0, config.updateInterval - 1));
         daylightRuleGuardTickCounter = DAYLIGHT_RULE_GUARD_INTERVAL_TICKS;
         sleepSkipLogged = false;
+        lastProcessedServerTick = RealtimeServerState.UNKNOWN_TICK;
         timeMath.resetCustomTicks();
         gameRules.resetWarningState();
 

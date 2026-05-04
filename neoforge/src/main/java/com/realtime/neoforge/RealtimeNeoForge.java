@@ -4,9 +4,9 @@ import com.realtime.common.Log4jRealtimeLog;
 import com.realtime.common.RealtimeConstants;
 import com.realtime.common.RealtimeController;
 import com.realtime.common.RealtimeLog;
+import com.realtime.common.RealtimeWorldAccess;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.Level;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.neoforge.common.NeoForge;
@@ -39,7 +39,7 @@ public final class RealtimeNeoForge {
             return;
         }
 
-        MinecraftServer server = level.getServer();
+        MinecraftServer server = RealtimeWorldAccess.server(level);
         if (server != null) {
             controller.onWorldLoad(server, level);
         }
@@ -50,12 +50,10 @@ public final class RealtimeNeoForge {
             return;
         }
 
-        // Run once per server tick instead of once per loaded dimension.
-        if (!level.dimension().equals(Level.OVERWORLD)) {
-            return;
-        }
-
-        MinecraftServer server = level.getServer();
+        // Some NeoForge versions fire this once per loaded level. RealtimeController
+        // de-duplicates by server tick, so this stays compatible without relying on
+        // Level.OVERWORLD constants that moved in newer mappings.
+        MinecraftServer server = RealtimeWorldAccess.server(level);
         if (server != null) {
             controller.onServerTick(server);
         }

@@ -110,7 +110,7 @@ Forge 1.21.2 is disabled because the normal Forge 1.21.x release line does not p
 
 ## About Minecraft 26.x+
 
-A `26.1.2.properties.example` file is included only as a starting point for the new version format. It is not enabled in the release matrix. Enable it only after checking current loader support and compiling all enabled targets.
+`26.1`, `26.1.1` and `26.1.2` are active profiles. `26.1.2.properties.example` is kept only as a reference template and must not be treated as the source of truth; use `config/build-compatibility.lock.json` plus the active profile files instead.
 
 
 ## Build tool compatibility
@@ -243,4 +243,19 @@ Important rules:
 
 ### Minecraft 26.1.x time API compatibility
 
-Minecraft 26.1.x no longer exposes the same `ServerLevel#getDayTime()` / `ServerLevel#setDayTime(...)` convenience methods in the mapped API used by every loader build. RealtimeSync reads and writes day time through the level data compatibility helper (`RealtimeWorldTime`) so the same common runtime compiles for both `1.21.x` and `26.1.x`.
+Minecraft 26.1.x no longer exposes the same `ServerLevel#getDayTime()` / `ServerLevel#setDayTime(...)` convenience methods in the mapped API used by every loader build. RealtimeSync reads and writes day time through the reflective compatibility helper (`RealtimeWorldTime`) so the same common runtime compiles for both `1.21.x` and `26.1.x`, even when direct `ServerLevel` convenience methods disappear or move.
+
+
+## Compatibility lock and supported matrix
+
+Supported Minecraft/loader combinations are controlled by `config/build-compatibility.lock.json`. CI no longer hardcodes the full matrix in YAML; it generates the matrix with `scripts/generate-ci-matrix.py`, so disabled or unsupported combinations are skipped before Gradle resolves loader dependencies.
+
+Before changing a loader dependency, update both the relevant `buildProfiles/<version>.properties` file and the compatibility lock, then run:
+
+```bash
+python3 scripts/validate-build-profiles.py
+python3 scripts/validate-dependency-artifacts.py
+bash scripts/verify-build-matrix.sh
+```
+
+Use `python3 scripts/validate-dependency-artifacts.py --online` when you need to probe Maven/Fabric/Forge/NeoForge repositories directly. See `docs/COMPATIBILITY.md` for the full process.

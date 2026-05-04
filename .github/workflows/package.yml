@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      verify_dependencies_online:
+        description: 'Probe Maven dependency artifacts online before building'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -19,7 +24,7 @@ env:
 
 jobs:
   validate:
-    name: Validate build matrix and scripts
+    name: Validate compatibility lock and scripts
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -36,40 +41,53 @@ jobs:
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
 
+      - name: Validate build profiles against compatibility lock
+        shell: bash
+        run: python3 scripts/validate-build-profiles.py
+
+      - name: Validate dependency coordinates offline
+        shell: bash
+        run: python3 scripts/validate-dependency-artifacts.py
+
+      - name: Validate dependency artifacts online
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_dependencies_online }}
+        shell: bash
+        run: python3 scripts/validate-dependency-artifacts.py --online
+
       - name: Verify build matrix guardrails
         shell: bash
         run: bash scripts/verify-build-matrix.sh
 
+  prepare-matrix:
+    name: Generate supported loader matrix
+    runs-on: ubuntu-latest
+    needs: validate
+    outputs:
+      build_matrix: ${{ steps.matrix.outputs.build_matrix }}
+      has_entries: ${{ steps.matrix.outputs.has_entries }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate matrix from compatibility lock
+        id: matrix
+        shell: bash
+        run: python3 scripts/generate-ci-matrix.py --github-output
+
   build-loader:
     name: Build ${{ matrix.loader }} for Minecraft ${{ matrix.mc_profile }}
     runs-on: ubuntu-latest
-    needs: validate
+    needs:
+      - validate
+      - prepare-matrix
+    if: ${{ needs.prepare-matrix.outputs.has_entries == 'true' }}
     env:
       TARGET_LOADER: ${{ matrix.loader }}
     strategy:
       fail-fast: false
-      matrix:
-        mc_profile:
-          - '1.21'
-          - '1.21.1'
-          - '1.21.2'
-          - '1.21.3'
-          - '1.21.4'
-          - '1.21.5'
-          - '1.21.6'
-          - '1.21.7'
-          - '1.21.8'
-          - '1.21.9'
-          - '1.21.10'
-          - '1.21.11'
-          - '26.1'
-          - '26.1.1'
-          - '26.1.2'
-        loader:
-          - fabric
-          - quilt
-          - forge
-          - neoforge
+      matrix: ${{ fromJson(needs.prepare-matrix.outputs.build_matrix) }}
 
     steps:
       - name: Checkout
@@ -119,21 +137,13 @@ jobs:
         shell: bash
         run: bash scripts/ci-read-profile.sh '${{ matrix.mc_profile }}' '${{ matrix.loader }}'
 
-      - name: Skip disabled loader
-        if: steps.versions.outputs.enabled != 'true'
-        shell: bash
-        run: |
-          echo "Skipping ${{ steps.versions.outputs.loader_title }} for Minecraft ${{ steps.versions.outputs.minecraft_version }} because ${{ steps.versions.outputs.enable_key }}=false."
-
       - name: Set up Java ${{ steps.versions.outputs.java_version }}
-        if: steps.versions.outputs.enabled == 'true'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: ${{ steps.versions.outputs.java_version }}
 
       - name: Pin Gradle and loader toolchains to selected Java
-        if: steps.versions.outputs.enabled == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -145,21 +155,17 @@ jobs:
           java -version
 
       - name: Set up Gradle
-        if: steps.versions.outputs.enabled == 'true'
         uses: gradle/actions/setup-gradle@v4
 
       - name: Print Gradle profile
-        if: steps.versions.outputs.enabled == 'true'
         shell: bash
         run: bash ./gradlew -PmcProfile=${{ steps.versions.outputs.mc_profile }} -PtargetLoader=none printBuildProfile --stacktrace
 
       - name: Build loader jar
-        if: steps.versions.outputs.enabled == 'true'
         shell: bash
         run: bash ./gradlew -PmcProfile=${{ steps.versions.outputs.mc_profile }} -PtargetLoader=${{ steps.versions.outputs.loader }} clean ${{ steps.versions.outputs.gradle_task }} --stacktrace
 
       - name: Validate jar metadata
-        if: steps.versions.outputs.enabled == 'true'
         shell: bash
         run: |
           python3 scripts/validate-jar-metadata.py \
@@ -169,7 +175,6 @@ jobs:
             --jar '${{ steps.versions.outputs.jar_path }}'
 
       - name: Stage release artifact
-        if: steps.versions.outputs.enabled == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -199,7 +204,6 @@ jobs:
           find "${OUT}" -maxdepth 1 -type f -print -exec ls -lah {} \;
 
       - name: Upload loader artifact
-        if: steps.versions.outputs.enabled == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.versions.outputs.artifact_name }}
@@ -210,8 +214,10 @@ jobs:
   github-release:
     name: Publish GitHub release artifacts
     runs-on: ubuntu-latest
-    needs: build-loader
-    if: ${{ always() && github.ref_type == 'tag' }}
+    needs:
+      - build-loader
+      - prepare-matrix
+    if: ${{ always() && github.ref_type == 'tag' && needs.prepare-matrix.outputs.has_entries == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -253,33 +259,14 @@ jobs:
   curseforge-publish:
     name: Publish ${{ matrix.loader }} for Minecraft ${{ matrix.mc_profile }} to CurseForge
     runs-on: ubuntu-latest
-    needs: build-loader
-    if: ${{ always() && github.ref_type == 'tag' }}
+    needs:
+      - build-loader
+      - prepare-matrix
+    if: ${{ always() && github.ref_type == 'tag' && needs.prepare-matrix.outputs.has_entries == 'true' }}
     continue-on-error: true
     strategy:
       fail-fast: false
-      matrix:
-        mc_profile:
-          - '1.21'
-          - '1.21.1'
-          - '1.21.2'
-          - '1.21.3'
-          - '1.21.4'
-          - '1.21.5'
-          - '1.21.6'
-          - '1.21.7'
-          - '1.21.8'
-          - '1.21.9'
-          - '1.21.10'
-          - '1.21.11'
-          - '26.1'
-          - '26.1.1'
-          - '26.1.2'
-        loader:
-          - fabric
-          - quilt
-          - forge
-          - neoforge
+      matrix: ${{ fromJson(needs.prepare-matrix.outputs.build_matrix) }}
 
     steps:
       - name: Checkout
@@ -306,28 +293,20 @@ jobs:
         shell: bash
         run: bash scripts/ci-read-profile.sh '${{ matrix.mc_profile }}' '${{ matrix.loader }}'
 
-      - name: Skip disabled loader
-        if: steps.versions.outputs.enabled != 'true'
-        shell: bash
-        run: |
-          echo "Skipping CurseForge publish for disabled loader: ${{ steps.versions.outputs.loader_title }} Minecraft ${{ steps.versions.outputs.minecraft_version }}."
-
       - name: Download loader artifact
-        if: steps.versions.outputs.enabled == 'true'
         uses: actions/download-artifact@v4
         with:
           name: ${{ steps.versions.outputs.artifact_name }}
           path: publish-artifact
 
       - name: Generate CHANGELOG.md
-        if: steps.versions.outputs.enabled == 'true'
         uses: orhun/git-cliff-action@v4
         with:
           config: cliff.toml
           args: --latest --strip header --output CHANGELOG.md
 
       - name: Publish loader file to CurseForge
-        if: steps.versions.outputs.enabled == 'true' && env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != ''
+        if: env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != ''
         uses: Kira-NT/mc-publish@v3.3
         with:
           curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
@@ -349,7 +328,7 @@ jobs:
           fail-mode: warn
 
       - name: CurseForge credentials not configured
-        if: steps.versions.outputs.enabled == 'true' && (env.CURSEFORGE_PROJECT_ID == '' || env.CURSEFORGE_TOKEN == '')
+        if: env.CURSEFORGE_PROJECT_ID == '' || env.CURSEFORGE_TOKEN == ''
         shell: bash
         run: |
           echo "Skipping CurseForge publish because CURSEFORGE_PROJECT_ID or CURSEFORGE_TOKEN is not configured."
