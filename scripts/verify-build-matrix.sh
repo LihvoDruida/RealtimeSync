@@ -61,16 +61,16 @@ grep -q "maven fg.forgeMaven" forge/build.gradle || fail "Forge module must add 
 grep -q "maven fg.minecraftLibsMaven" forge/build.gradle || fail "Forge module must add ForgeGradle 7 Minecraft libs Maven helper"
 
 
-if grep -R "import net.minecraft.world.level.GameRules" fabric forge neoforge -n; then
+if grep -R "import net.minecraft.world.level.GameRules" common fabric forge neoforge -n; then
   fail "Direct GameRules imports are not compatible across all 1.21.x mappings"
 fi
 
-if grep -R "performPrefixedCommand\|gamerule doDaylightCycle\|gamerule minecraft:advance_time" fabric forge neoforge -n; then
-  fail "Loader sources must not change daylight gamerules through commands; use reflective GameRules mutation to avoid 1.21.x gamerule rename/runtime log spam"
+if grep -R "performPrefixedCommand\|gamerule doDaylightCycle\|gamerule minecraft:advance_time" common fabric forge neoforge -n; then
+  fail "Sources must not change daylight gamerules through commands; use reflective GameRules mutation to avoid 1.21.x gamerule rename/runtime log spam"
 fi
 
-grep -R "DO_DAYLIGHT_CYCLE" fabric forge neoforge >/dev/null || fail "Loader sources must try the legacy daylight gamerule key DO_DAYLIGHT_CYCLE"
-grep -R "ADVANCE_TIME" fabric forge neoforge >/dev/null || fail "Loader sources must try the 1.21.11 daylight gamerule key ADVANCE_TIME"
+grep -R "DO_DAYLIGHT_CYCLE" common/src/main/java >/dev/null || fail "Common runtime must try the legacy daylight gamerule key DO_DAYLIGHT_CYCLE"
+grep -R "ADVANCE_TIME" common/src/main/java >/dev/null || fail "Common runtime must try the 1.21.11 daylight gamerule key ADVANCE_TIME"
 
 if grep -R "net.minecraftforge.eventbus.api.SubscribeEvent\|@SubscribeEvent\|MinecraftForge.EVENT_BUS" forge/src/main/java -n; then
   fail "Forge source must not use MinecraftForge.EVENT_BUS or old annotation event-bus registration; Forge 1.21.6+ uses EventBus 7 migration helpers"
@@ -90,6 +90,25 @@ fi
 
 if grep -n "game-version-filter: releases" .github/workflows/package.yml; then
   fail "CurseForge publish must not use game-version-filter: releases; it fetches Mojang version_manifest_v2.json during publish"
+fi
+
+
+grep -q "throw new GradleException" build.gradle || fail "Missing mcProfile must fail instead of silently falling back to gradle.properties"
+if grep -nE '^neoforge_version=.*\+$' gradle.properties README.md VERSIONING.md buildProfiles/*.properties; then
+  fail "NeoForge versions must be exact in active profiles, fallback config and docs"
+fi
+
+grep -q "final class RealtimeController" common/src/main/java/com/realtime/common/RealtimeController.java || fail "Common runtime controller is missing"
+grep -q "final class RealtimeGameRules" common/src/main/java/com/realtime/common/RealtimeGameRules.java || fail "Common GameRules helper is missing"
+grep -q "cachedResolution" common/src/main/java/com/realtime/common/RealtimeGameRules.java || fail "RealtimeGameRules must cache its reflective resolver"
+grep -q "DAYLIGHT_RULE_GUARD_INTERVAL_TICKS" common/src/main/java/com/realtime/common/RealtimeController.java || fail "Daylight gamerule guard must be low-frequency, not every sync tick"
+
+for source in fabric/src/main/java/com/realtime/fabric/RealtimeFabric.java forge/src/main/java/com/realtime/forge/RealtimeForge.java neoforge/src/main/java/com/realtime/neoforge/RealtimeNeoForge.java; do
+  grep -q "RealtimeController" "${source}" || fail "${source} must delegate runtime behavior to RealtimeController"
+done
+
+if grep -R "RealtimeMath\|setBooleanGameRule\|invokeBooleanRuleSetter\|findDirectGameRuleSetter" fabric/src/main/java forge/src/main/java neoforge/src/main/java -n; then
+  fail "Loader entrypoints must not duplicate common sync math or GameRules reflection"
 fi
 
 bash -n scripts/build-all-profiles.sh

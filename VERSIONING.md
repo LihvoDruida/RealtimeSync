@@ -145,3 +145,13 @@ The CurseForge publish steps intentionally set `game-version-filter: none` in `.
 Do not switch this back to `releases` for single-version uploads. `mc-publish` may otherwise call Mojang's `version_manifest_v2.json` during the publish step, so a temporary Mojang/Piston metadata fetch failure can break an already-built release.
 
 For this project each matrix job already passes an exact Minecraft version from `buildProfiles/<mcProfile>.properties`, so no Mojang-side version filtering is needed during publishing.
+
+## Runtime guardrails
+
+Shared runtime behavior lives in `common/src/main/java/com/realtime/common`:
+
+- `RealtimeController` handles config reloads, sync cadence and applying time to worlds.
+- `RealtimeGameRules` handles daylight-cycle gamerule mutation with a cached reflective resolver.
+- Loader entrypoints should stay thin and must not duplicate config polling, GameRules reflection or time-sync math.
+
+Do not reintroduce command-based gamerule changes such as `/gamerule doDaylightCycle false`; Minecraft 1.21.11 renamed daylight-cycle behavior and command syntax can spam runtime logs.

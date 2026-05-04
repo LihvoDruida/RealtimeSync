@@ -75,6 +75,17 @@ debugLogging=false
 | `customDayLengthMinutes` | `0` | `0` means real clock sync. Values above `0` set a custom Minecraft day length. |
 | `debugLogging` | `false` | Enables verbose sync logs. |
 
+
+### Runtime architecture
+
+RealtimeSync keeps loader entrypoints thin. Fabric, Quilt, Forge and NeoForge only connect loader lifecycle events to the shared `common` runtime:
+
+- `RealtimeController` owns config reloads, sync cadence and time application.
+- `RealtimeGameRules` owns cross-1.21.x daylight gamerule mutation and caches the reflective lookup after the first successful resolution.
+- Loader modules should not duplicate sync math, config polling, GameRules reflection or command-based gamerule changes.
+
+The daylight cycle gamerule is applied on world/server start, after config reloads and by a low-frequency safety guard. It is not executed through `/gamerule` commands and is not re-resolved through reflection every sync tick.
+
 ## Building
 
 Build the default profile from `gradle.properties`:
@@ -143,7 +154,7 @@ fabric_version=0.+
 forge_version=61.1.5
 forge_loader_version=[61,)
 
-neoforge_version=21.11.+
+neoforge_version=21.11.0-beta
 neoforge_loader_version=[21.11,)
 ```
 

@@ -14,7 +14,7 @@ ext.loadMinecraftProfile = {
     if (profileFile.isFile()) {
         profileFile.withInputStream { loaded.load(it) }
     } else {
-        logger.warn("Minecraft build profile '${requestedProfile}' was not found at ${profileFile}. Falling back to gradle.properties values.")
+        throw new GradleException("Minecraft build profile '${requestedProfile}' was not found at ${profileFile}. Add buildProfiles/${requestedProfile}.properties or use a supported -PmcProfile value.")
     }
 
     loaded.setProperty('mcProfile', requestedProfile)
