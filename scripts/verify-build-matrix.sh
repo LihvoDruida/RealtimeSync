@@ -76,6 +76,15 @@ fi
 grep -q "ServerLifecycleHooks.getCurrentServer" forge/src/main/java/com/realtime/forge/RealtimeForge.java || fail "Forge source must use ServerLifecycleHooks-based ticking for cross-1.21.x compatibility"
 grep -q "ScheduledExecutorService" forge/src/main/java/com/realtime/forge/RealtimeForge.java || fail "Forge source must schedule safe server-thread ticks without Forge event-bus APIs"
 
+
+if [[ "$(grep -c "game-version-filter: none" .github/workflows/package.yml)" -lt 4 ]]; then
+  fail "All CurseForge mc-publish steps must use game-version-filter: none to avoid Mojang manifest fetch failures during publish"
+fi
+
+if grep -n "game-version-filter: releases" .github/workflows/package.yml; then
+  fail "CurseForge publish must not use game-version-filter: releases; it fetches Mojang version_manifest_v2.json during publish"
+fi
+
 bash -n scripts/build-all-profiles.sh
 
 echo "Build matrix static verification passed."

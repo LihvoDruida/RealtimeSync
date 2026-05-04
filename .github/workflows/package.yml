@@ -253,6 +253,7 @@ jobs:
             fabric
           game-versions: |
             ${{ steps.versions.outputs.curseforge_game_versions }}
+          game-version-filter: none
           java: |
             ${{ steps.versions.outputs.curseforge_java_versions }}
 
@@ -271,6 +272,7 @@ jobs:
             quilt
           game-versions: |
             ${{ steps.versions.outputs.curseforge_game_versions }}
+          game-version-filter: none
           java: |
             ${{ steps.versions.outputs.curseforge_java_versions }}
 
@@ -289,6 +291,7 @@ jobs:
             forge
           game-versions: |
             ${{ steps.versions.outputs.curseforge_game_versions }}
+          game-version-filter: none
           java: |
             ${{ steps.versions.outputs.curseforge_java_versions }}
 
@@ -307,5 +310,6 @@ jobs:
             neoforge
           game-versions: |
             ${{ steps.versions.outputs.curseforge_game_versions }}
+          game-version-filter: none
           java: |
             ${{ steps.versions.outputs.curseforge_java_versions }}

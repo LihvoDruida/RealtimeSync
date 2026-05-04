@@ -137,3 +137,11 @@ The project wrapper is pinned to Gradle 9.3.0. Do not downgrade it while using F
 ### Build compatibility notes
 
 The 1.21.x matrix intentionally avoids direct `GameRules` imports in loader entrypoints because Mojang mappings are not stable across every 1.21.x profile. The mod disables `doDaylightCycle` through the server command API instead. Forge also uses typed `MinecraftForge.EVENT_BUS.addListener(...)` callbacks instead of the older `@SubscribeEvent` annotation path, which is not present in the newer ForgeGradle 7 / Forge 58+ compile classpath. NeoForge profile versions are pinned exactly; do not use `21.x.+` with ModDev/NeoForm because it is resolved as a literal userdev artifact in this setup.
+
+## CurseForge publish guardrail
+
+The CurseForge publish steps intentionally set `game-version-filter: none` in `.github/workflows/package.yml`.
+
+Do not switch this back to `releases` for single-version uploads. `mc-publish` may otherwise call Mojang's `version_manifest_v2.json` during the publish step, so a temporary Mojang/Piston metadata fetch failure can break an already-built release.
+
+For this project each matrix job already passes an exact Minecraft version from `buildProfiles/<mcProfile>.properties`, so no Mojang-side version filtering is needed during publishing.
