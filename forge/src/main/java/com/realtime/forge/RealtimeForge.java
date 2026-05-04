@@ -14,6 +14,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.Executors;
@@ -38,6 +40,7 @@ public final class RealtimeForge {
     private long configLastModified = -1L;
     private int tickCounter = 0;
     private int configReloadTickCounter = 0;
+    private boolean daylightCycleRuleWarningShown = false;
 
     public RealtimeForge() {
         Path configDir = FMLPaths.CONFIGDIR.get();
@@ -141,12 +144,128 @@ public final class RealtimeForge {
     }
 
     private void disableDaylightCycle(MinecraftServer server) {
-        // Avoid direct GameRules imports: Mojang mappings moved this class/package in newer 1.21.x lines.
-        // The command API is stable across the targeted 1.21 profiles and changes the same doDaylightCycle rule.
-        server.getCommands().performPrefixedCommand(
-                server.createCommandSourceStack(),
-                "gamerule doDaylightCycle false"
-        );
+        boolean changed = false;
+        for (ServerLevel level : server.getAllLevels()) {
+            changed |= setBooleanGameRule(level, server, false, "DO_DAYLIGHT_CYCLE", "ADVANCE_TIME", "RULE_DAYLIGHT", "RULE_ADVANCE_TIME", "field_19396");
+        }
+
+        if (!changed) {
+            warnMissingDaylightCycleRuleOnce();
+        }
+    }
+
+    private void warnMissingDaylightCycleRuleOnce() {
+        if (daylightCycleRuleWarningShown) {
+            return;
+        }
+
+        daylightCycleRuleWarningShown = true;
+        LOGGER.warn("Could not disable vanilla daylight cycle: no compatible daylight gamerule key was found.");
+    }
+
+    private boolean setBooleanGameRule(ServerLevel level, MinecraftServer server, boolean value, String... keyFieldNames) {
+        Object gameRules = level.getGameRules();
+        Class<?> gameRulesClass = gameRules.getClass();
+
+        for (String keyFieldName : keyFieldNames) {
+            try {
+                Field keyField = findField(gameRulesClass, keyFieldName);
+                if (keyField == null) {
+                    continue;
+                }
+
+                keyField.setAccessible(true);
+                Object key = keyField.get(null);
+                if (invokeDirectGameRuleSetter(gameRulesClass, gameRules, key, server, value)) {
+                    return true;
+                }
+
+                Object rule = invokeGetRule(gameRulesClass, gameRules, key);
+                if (rule != null && invokeBooleanRuleSetter(rule, server, value)) {
+                    return true;
+                }
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
+                // Try the next Minecraft 1.21.x gamerule key name.
+            }
+        }
+
+        return false;
+    }
+
+    private Field findField(Class<?> type, String fieldName) {
+        Class<?> current = type;
+        while (current != null) {
+            try {
+                return current.getDeclaredField(fieldName);
+            } catch (NoSuchFieldException ignored) {
+                current = current.getSuperclass();
+            }
+        }
+
+        return null;
+    }
+
+    private boolean invokeDirectGameRuleSetter(Class<?> gameRulesClass, Object gameRules, Object key, MinecraftServer server, boolean value)
+            throws ReflectiveOperationException {
+        for (Method method : gameRulesClass.getMethods()) {
+            if (!method.getName().equals("setValue") || method.getParameterCount() != 3) {
+                continue;
+            }
+
+            Class<?>[] parameterTypes = method.getParameterTypes();
+            if (!parameterTypes[0].isAssignableFrom(key.getClass())) {
+                continue;
+            }
+            if (!parameterTypes[1].isAssignableFrom(Boolean.class)) {
+                continue;
+            }
+            if (!parameterTypes[2].isAssignableFrom(server.getClass())) {
+                continue;
+            }
+
+            method.invoke(gameRules, key, value, server);
+            return true;
+        }
+
+        return false;
+    }
+
+    private Object invokeGetRule(Class<?> gameRulesClass, Object gameRules, Object key) throws ReflectiveOperationException {
+        for (Method method : gameRulesClass.getMethods()) {
+            if ((!method.getName().equals("get") && !method.getName().equals("getRule")) || method.getParameterCount() != 1) {
+                continue;
+            }
+
+            Class<?> parameterType = method.getParameterTypes()[0];
+            if (!parameterType.isAssignableFrom(key.getClass())) {
+                continue;
+            }
+
+            return method.invoke(gameRules, key);
+        }
+
+        return null;
+    }
+
+    private boolean invokeBooleanRuleSetter(Object rule, MinecraftServer server, boolean value) throws ReflectiveOperationException {
+        for (Method method : rule.getClass().getMethods()) {
+            if (!method.getName().equals("set") || method.getParameterCount() != 2) {
+                continue;
+            }
+
+            Class<?>[] parameterTypes = method.getParameterTypes();
+            if (parameterTypes[0] != boolean.class && parameterTypes[0] != Boolean.class) {
+                continue;
+            }
+            if (!parameterTypes[1].isAssignableFrom(server.getClass())) {
+                continue;
+            }
+
+            method.invoke(rule, value, server);
+            return true;
+        }
+
+        return false;
     }
 
     private void checkConfigReload() {

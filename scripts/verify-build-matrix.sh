@@ -65,6 +65,13 @@ if grep -R "import net.minecraft.world.level.GameRules" fabric forge neoforge -n
   fail "Direct GameRules imports are not compatible across all 1.21.x mappings"
 fi
 
+if grep -R "performPrefixedCommand\|gamerule doDaylightCycle\|gamerule minecraft:advance_time" fabric forge neoforge -n; then
+  fail "Loader sources must not change daylight gamerules through commands; use reflective GameRules mutation to avoid 1.21.x gamerule rename/runtime log spam"
+fi
+
+grep -R "DO_DAYLIGHT_CYCLE" fabric forge neoforge >/dev/null || fail "Loader sources must try the legacy daylight gamerule key DO_DAYLIGHT_CYCLE"
+grep -R "ADVANCE_TIME" fabric forge neoforge >/dev/null || fail "Loader sources must try the 1.21.11 daylight gamerule key ADVANCE_TIME"
+
 if grep -R "net.minecraftforge.eventbus.api.SubscribeEvent\|@SubscribeEvent\|MinecraftForge.EVENT_BUS" forge/src/main/java -n; then
   fail "Forge source must not use MinecraftForge.EVENT_BUS or old annotation event-bus registration; Forge 1.21.6+ uses EventBus 7 migration helpers"
 fi
