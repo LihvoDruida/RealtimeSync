@@ -17,6 +17,9 @@ expected_profiles=(
   "1.21.9"
   "1.21.10"
   "1.21.11"
+  "26.1"
+  "26.1.1"
+  "26.1.2"
 )
 
 fail() {
@@ -39,15 +42,15 @@ for profile in "${expected_profiles[@]}"; do
   fi
 done
 
-grep -q "gradle-9.3.0-bin.zip" gradle/wrapper/gradle-wrapper.properties || fail "Gradle wrapper must be 9.3.0 for ForgeGradle 7"
+grep -q "gradle-9.4.0-bin.zip" gradle/wrapper/gradle-wrapper.properties || fail "Gradle wrapper must be 9.4.0 for ForgeGradle 7"
 grep -q "id 'net.fabricmc.fabric-loom-remap' version '1.15.5' apply false" build.gradle || fail "Root build must use Fabric Loom Remap 1.15.5"
 grep -q "apply plugin: 'net.fabricmc.fabric-loom-remap'" fabric/build.gradle || fail "Fabric module must use Fabric Loom Remap"
 grep -q "apply plugin: 'net.fabricmc.fabric-loom-remap'" quilt/build.gradle || fail "Quilt module must use Fabric Loom Remap"
 grep -q "id 'net.minecraftforge.gradle' version '7.0.25' apply false" build.gradle || fail "Root build must use ForgeGradle 7.0.25"
 grep -q "^enable_forge=false$" buildProfiles/1.21.2.properties || fail "Forge must stay disabled for 1.21.2 unless a real Forge artifact is added"
 
-if grep -R --exclude="verify-build-matrix.sh" "gradle-9.2.1-bin.zip\|Gradle Wrapper 9.2.1\|Gradle wrapper is pinned to 9.2.1" -n .; then
-  fail "Old Gradle 9.2.1 references remain"
+if grep -R --exclude="verify-build-matrix.sh" "gradle-9.2.1-bin.zip\|gradle-9.3.0-bin.zip\|Gradle Wrapper 9.2.1\|Gradle Wrapper 9.3.0\|Gradle wrapper is pinned to 9.2.1\|Gradle wrapper is pinned to 9.3.0" -n .; then
+  fail "Old Gradle 9.2.1/9.3.0 references remain; the 26.1.x matrix requires Gradle 9.4.0"
 fi
 
 
@@ -103,6 +106,20 @@ if grep -q "buildAllLoaders" .github/workflows/package.yml; then
   fail "Workflow must not build all loaders inside one matrix job; use mc_profile x loader isolation"
 fi
 python3 -m py_compile scripts/validate-jar-metadata.py
+
+# Minecraft 26.1.x profile guardrails.
+for profile in 26.1 26.1.1 26.1.2; do
+  grep -q "^java_version=25$" "buildProfiles/${profile}.properties" || fail "${profile} must use Java 25"
+  grep -q "^curseforge_java_versions=Java 25$" "buildProfiles/${profile}.properties" || fail "${profile} CurseForge metadata must use Java 25"
+  grep -q "^fabric_loader_version=0.18.4$" "buildProfiles/${profile}.properties" || fail "${profile} must use Fabric Loader 0.18.4"
+  grep -q "^neoforge_loader_version=\[1,)" "buildProfiles/${profile}.properties" || fail "${profile} NeoForge javafml loaderVersion must use [1,)"
+  grep -q "^neoforge_version_range=\[${profile},)" "buildProfiles/${profile}.properties" || fail "${profile} NeoForge dependency range must match profile"
+done
+
+grep -q "java-version: \${{ steps.versions.outputs.java_version }}" .github/workflows/package.yml || fail "Workflow must select Java dynamically from each Minecraft profile"
+grep -q "Pin Gradle and loader toolchains to selected Java" .github/workflows/package.yml || fail "Workflow must pin Gradle/toolchains to the selected Java profile"
+grep -q "neoforge_version_range" neoforge/build.gradle || fail "NeoForge resources must support a separate NeoForge dependency version range"
+grep -q "versionRange=\"\${neoforge_version_range}\"" neoforge/src/main/resources/META-INF/neoforge.mods.toml || fail "NeoForge dependency must use neoforge_version_range, not javafml loaderVersion"
 
 if grep -n "String rawValue = properties.getProperty(key);[[:space:]]*$" common/src/main/java/com/realtime/common/RealtimeConfig.java | awk -F: 'prev+1==$1 { found=1 } { prev=$1 } END { exit found ? 0 : 1 }'; then
   fail "RealtimeConfig must not duplicate consecutive rawValue declarations"

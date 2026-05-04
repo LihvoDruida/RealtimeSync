@@ -8,7 +8,7 @@ The repository currently contains profiles for:
 
 ```txt
 1.21, 1.21.1, 1.21.2, 1.21.3, 1.21.4, 1.21.5,
-1.21.6, 1.21.7, 1.21.8, 1.21.9, 1.21.10, 1.21.11
+1.21.6, 1.21.7, 1.21.8, 1.21.9, 1.21.10, 1.21.11, 26.1, 26.1.1, 26.1.2
 ```
 
 Every profile lives in:
@@ -115,19 +115,19 @@ A `26.1.2.properties.example` file is included only as a starting point for the 
 
 ## Build tool compatibility
 
-The project wrapper is pinned to Gradle 9.3.0. Do not downgrade it while using Fabric Loom Remap 1.15.x and ForgeGradle 7.x, because the 1.21.10/1.21.11 toolchains need the newer Gradle/plugin stack.
+The project wrapper is pinned to Gradle 9.4.0. Do not downgrade it while using Fabric Loom Remap 1.15.x and ForgeGradle 7.x, because the 1.21.10/1.21.11 toolchains need the newer Gradle/plugin stack.
 
 
 ## Build toolchain notes
 
-- Gradle wrapper is pinned to 9.3.0 so modern Fabric Loom Remap 1.15.x and ForgeGradle 7.x can resolve Minecraft 1.21.10/1.21.11 correctly.
+- Gradle wrapper is pinned to 9.4.0 so modern Fabric Loom Remap 1.15.x and ForgeGradle 7.x can resolve Minecraft 1.21.10/1.21.11 correctly.
 - ForgeGradle 6.x is not used because it fails on newer Forge 60.x/61.x userdev artifacts.
 - A disabled loader in `buildProfiles/<version>.properties` is skipped before its loader-specific dependencies are resolved. This prevents placeholder values such as `forge_version=unsupported` from breaking profile tasks.
 
 
 ## Build toolchain guardrails
 
-- Use Gradle Wrapper `9.3.0` or newer with ForgeGradle 7. Gradle `9.2.1` is not enough and fails during `:forge` configuration.
+- Use Gradle Wrapper `9.4.0` or newer with ForgeGradle 7. Gradle `9.3.0` is no longer enough for the 26.1.x toolchain, and Gradle `9.2.1` is not enough for ForgeGradle 7 and fails during `:forge` configuration.
 - ForgeGradle 7 run configs must use `workingDir.convention(...)` or `workingDir = ...`; the old `workingDirectory(...)` MDK syntax fails on `SlimeLauncherOptionsImpl`.
 - ForgeGradle 7 dependencies must use `implementation minecraft.dependency("net.minecraftforge:forge:${minecraft_version}-${forge_version}")` instead of the older `minecraft "..."` configuration notation.
 - Use `net.fabricmc.fabric-loom-remap` for the `1.21` to `1.21.11` Fabric/Quilt-compatible builds.
@@ -209,3 +209,16 @@ Do not revert these defaults to `syncMode=instant`, `syncAllWorlds=true`, `updat
 ### Forge 1.21.10 CI note
 
 The `1.21.10` Forge profile is pinned to the official recommended Forge `60.1.0` instead of the latest `60.1.9`. The latest userdev can fail during ForgeGradle 7 Mavenizer source recompilation on GitHub-hosted runners. CI also passes `-PtargetLoader=<loader>` so one loader matrix entry never configures unrelated loader projects.
+
+
+## Minecraft 26.1.x profiles
+
+Active profiles are included for `26.1`, `26.1.1` and `26.1.2`. These profiles use Java 25, Fabric Loader `0.18.4`, pinned Fabric API versions, exact Forge versions and exact NeoForge versions. The 26.1.x NeoForge metadata uses `loaderVersion=[1,)` for `javafml` and a separate `neoforge_version_range` dependency range so the mod metadata matches current NeoForge 26.x conventions.
+
+Current pinned profile values:
+
+| Profile | Java | Fabric API | Forge | NeoForge |
+| --- | --- | --- | --- | --- |
+| `26.1` | 25 | `0.144.3+26.1` | `62.0.9` | `26.1.0.1-beta` |
+| `26.1.1` | 25 | `0.145.4+26.1.1` | `63.0.2` | `26.1.1.5-beta` |
+| `26.1.2` | 25 | `0.146.1+26.1.2` | `64.0.7` | `26.1.2.36-beta` |

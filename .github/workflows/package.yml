@@ -62,6 +62,9 @@ jobs:
           - '1.21.9'
           - '1.21.10'
           - '1.21.11'
+          - '26.1'
+          - '26.1.1'
+          - '26.1.2'
         loader:
           - fabric
           - quilt
@@ -82,26 +85,6 @@ jobs:
 
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
-
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-
-      - name: Pin Gradle and Forge toolchains to Java 21
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "ORG_GRADLE_OPTS=-Dorg.gradle.java.installations.paths=${JAVA_HOME} -Dorg.gradle.java.installations.auto-download=false" >> "${GITHUB_ENV}"
-          {
-            echo "org.gradle.java.installations.paths=${JAVA_HOME}"
-            echo "org.gradle.java.installations.auto-download=false"
-          } >> gradle.properties
-          java -version
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
 
       - name: Resolve release version from tag
         id: tag_version
@@ -141,6 +124,29 @@ jobs:
         shell: bash
         run: |
           echo "Skipping ${{ steps.versions.outputs.loader_title }} for Minecraft ${{ steps.versions.outputs.minecraft_version }} because ${{ steps.versions.outputs.enable_key }}=false."
+
+      - name: Set up Java ${{ steps.versions.outputs.java_version }}
+        if: steps.versions.outputs.enabled == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ steps.versions.outputs.java_version }}
+
+      - name: Pin Gradle and loader toolchains to selected Java
+        if: steps.versions.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "ORG_GRADLE_OPTS=-Dorg.gradle.java.installations.paths=${JAVA_HOME} -Dorg.gradle.java.installations.auto-download=false" >> "${GITHUB_ENV}"
+          {
+            echo "org.gradle.java.installations.paths=${JAVA_HOME}"
+            echo "org.gradle.java.installations.auto-download=false"
+          } >> gradle.properties
+          java -version
+
+      - name: Set up Gradle
+        if: steps.versions.outputs.enabled == 'true'
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Print Gradle profile
         if: steps.versions.outputs.enabled == 'true'
@@ -266,6 +272,9 @@ jobs:
           - '1.21.9'
           - '1.21.10'
           - '1.21.11'
+          - '26.1'
+          - '26.1.1'
+          - '26.1.2'
         loader:
           - fabric
           - quilt

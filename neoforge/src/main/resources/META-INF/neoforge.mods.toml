@@ -15,7 +15,7 @@ description='''Synchronizes Minecraft world time with real system time or a conf
 [[dependencies.realtime]]
 modId="neoforge"
 type="required"
-versionRange="${neoforge_loader_version}"
+versionRange="${neoforge_version_range}"
 ordering="NONE"
 side="BOTH"
 
