@@ -1,7 +1,14 @@
 plugins {
-    id 'net.neoforged.moddev'
     id 'maven-publish'
 }
+
+if (!rootProject.ext.isLoaderEnabled('neoforge')) {
+    logger.lifecycle("Skipping :neoforge: project is disabled for Minecraft ${rootProject.ext.minecraft_version} by buildProfiles/${rootProject.ext.mcProfile}.properties")
+    tasks.configureEach { enabled = false }
+    return
+}
+
+apply plugin: 'net.neoforged.moddev'
 
 base {
     archivesName = "${project.archives_base_name}-neoforge-${project.minecraft_version}"

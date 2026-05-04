@@ -209,4 +209,11 @@ This project is licensed under **CC0-1.0**, according to the included [`LICENSE`
 
 ## Build requirements
 
-Requires Java 21 and Gradle Wrapper 8.14.3 or newer because Fabric Loom 1.11.x requires Gradle 8.14+. Use `./gradlew` from this repository.
+Requires Java 21 and the bundled Gradle Wrapper 9.2.1 because Fabric Loom 1.15.x and ForgeGradle 7.x are used for the modern 1.21.x profiles. Use `./gradlew` from this repository.
+
+
+## Build toolchain notes
+
+- Gradle wrapper is pinned to 9.2.1 so modern Fabric Loom 1.15.x and ForgeGradle 7.x can resolve Minecraft 1.21.10/1.21.11 correctly.
+- ForgeGradle 6.x is not used because it fails on newer Forge 60.x/61.x userdev artifacts.
+- A disabled loader in `buildProfiles/<version>.properties` is skipped before its loader-specific dependencies are resolved. This prevents placeholder values such as `forge_version=unsupported` from breaking profile tasks.

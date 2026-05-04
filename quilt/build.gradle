@@ -1,7 +1,14 @@
 plugins {
-    id 'fabric-loom'
     id 'maven-publish'
 }
+
+if (!rootProject.ext.isLoaderEnabled('quilt')) {
+    logger.lifecycle("Skipping :quilt: project is disabled for Minecraft ${rootProject.ext.minecraft_version} by buildProfiles/${rootProject.ext.mcProfile}.properties")
+    tasks.configureEach { enabled = false }
+    return
+}
+
+apply plugin: 'fabric-loom'
 
 base {
     archivesName = "${project.archives_base_name}-quilt-${project.minecraft_version}"

@@ -1,7 +1,14 @@
 plugins {
-    id 'fabric-loom'
     id 'maven-publish'
 }
+
+if (!rootProject.ext.isLoaderEnabled('fabric')) {
+    logger.lifecycle("Skipping :fabric: project is disabled for Minecraft ${rootProject.ext.minecraft_version} by buildProfiles/${rootProject.ext.mcProfile}.properties")
+    tasks.configureEach { enabled = false }
+    return
+}
+
+apply plugin: 'fabric-loom'
 
 base {
     archivesName = "${project.archives_base_name}-fabric-${project.minecraft_version}"

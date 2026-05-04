@@ -1,7 +1,14 @@
 plugins {
-    id 'net.minecraftforge.gradle'
     id 'maven-publish'
 }
+
+if (!rootProject.ext.isLoaderEnabled('forge')) {
+    logger.lifecycle("Skipping :forge: project is disabled for Minecraft ${rootProject.ext.minecraft_version} by buildProfiles/${rootProject.ext.mcProfile}.properties")
+    tasks.configureEach { enabled = false }
+    return
+}
+
+apply plugin: 'net.minecraftforge.gradle'
 
 base {
     archivesName = "${project.archives_base_name}-forge-${project.minecraft_version}"

@@ -115,4 +115,11 @@ A `26.1.2.properties.example` file is included only as a starting point for the 
 
 ## Build tool compatibility
 
-The project wrapper is pinned to Gradle 8.14.3. Do not downgrade it while using Fabric Loom 1.11.x, because Loom requires Gradle 8.14 or newer.
+The project wrapper is pinned to Gradle 9.2.1. Do not downgrade it while using Fabric Loom 1.15.x and ForgeGradle 7.x, because the 1.21.10/1.21.11 toolchains need the newer Gradle/plugin stack.
+
+
+## Build toolchain notes
+
+- Gradle wrapper is pinned to 9.2.1 so modern Fabric Loom 1.15.x and ForgeGradle 7.x can resolve Minecraft 1.21.10/1.21.11 correctly.
+- ForgeGradle 6.x is not used because it fails on newer Forge 60.x/61.x userdev artifacts.
+- A disabled loader in `buildProfiles/<version>.properties` is skipped before its loader-specific dependencies are resolved. This prevents placeholder values such as `forge_version=unsupported` from breaking profile tasks.
