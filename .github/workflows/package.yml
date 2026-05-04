@@ -20,9 +20,29 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - mc_profile: '1.21'
+            java_version: '21'
+          - mc_profile: '1.21.1'
+            java_version: '21'
+          - mc_profile: '1.21.2'
+            java_version: '21'
+          - mc_profile: '1.21.3'
+            java_version: '21'
+          - mc_profile: '1.21.4'
+            java_version: '21'
           - mc_profile: '1.21.5'
             java_version: '21'
+          - mc_profile: '1.21.6'
+            java_version: '21'
+          - mc_profile: '1.21.7'
+            java_version: '21'
+          - mc_profile: '1.21.8'
+            java_version: '21'
+          - mc_profile: '1.21.9'
+            java_version: '21'
           - mc_profile: '1.21.10'
+            java_version: '21'
+          - mc_profile: '1.21.11'
             java_version: '21'
 
     steps:
@@ -120,18 +140,33 @@ jobs:
           MC_VERSION="$(read_profile_prop minecraft_version)"
           MC_LABEL="$(read_profile_prop minecraft_compat_label)"
           JAVA_VERSION="$(read_profile_prop java_version)"
+          CURSEFORGE_JAVA="$(read_profile_prop curseforge_java_versions)"
           MOD_VERSION="$(read_gradle_prop mod_version)"
+          ENABLE_FABRIC="$(read_profile_prop enable_fabric)"
+          ENABLE_QUILT="$(read_profile_prop enable_quilt)"
+          ENABLE_FORGE="$(read_profile_prop enable_forge)"
+          ENABLE_NEOFORGE="$(read_profile_prop enable_neoforge)"
 
           echo "mc_profile=${PROFILE}" >> "$GITHUB_OUTPUT"
           echo "minecraft_version=${MC_VERSION}" >> "$GITHUB_OUTPUT"
           echo "minecraft_compat_label=${MC_LABEL}" >> "$GITHUB_OUTPUT"
           echo "java_version=${JAVA_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "curseforge_java_versions=${CURSEFORGE_JAVA}" >> "$GITHUB_OUTPUT"
           echo "mod_version=${MOD_VERSION}" >> "$GITHUB_OUTPUT"
           echo "curseforge_game_versions=${MC_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "enable_fabric=${ENABLE_FABRIC}" >> "$GITHUB_OUTPUT"
+          echo "enable_quilt=${ENABLE_QUILT}" >> "$GITHUB_OUTPUT"
+          echo "enable_forge=${ENABLE_FORGE}" >> "$GITHUB_OUTPUT"
+          echo "enable_neoforge=${ENABLE_NEOFORGE}" >> "$GITHUB_OUTPUT"
 
           echo "Selected profile ${PROFILE}: Minecraft ${MC_VERSION}, Java ${JAVA_VERSION}"
+          echo "Loaders: fabric=${ENABLE_FABRIC}, quilt=${ENABLE_QUILT}, forge=${ENABLE_FORGE}, neoforge=${ENABLE_NEOFORGE}"
 
-      - name: Build all loader jars for profile
+      - name: Print Gradle profile
+        shell: bash
+        run: bash ./gradlew -PmcProfile=${{ steps.versions.outputs.mc_profile }} printBuildProfile --stacktrace
+
+      - name: Build loader jars for profile
         shell: bash
         run: bash ./gradlew -PmcProfile=${{ steps.versions.outputs.mc_profile }} clean buildAllLoaders --stacktrace
 
@@ -142,10 +177,21 @@ jobs:
           MC="${{ steps.versions.outputs.minecraft_version }}"
           MOD="${{ steps.versions.outputs.mod_version }}"
           test "${MOD}" = "${{ steps.tag_version.outputs.mod_version }}"
-          test -f "fabric/build/libs/realtime-sync-fabric-${MC}-${MOD}.jar"
-          test -f "forge/build/libs/realtime-sync-forge-${MC}-${MOD}.jar"
-          test -f "neoforge/build/libs/realtime-sync-neoforge-${MC}-${MOD}.jar"
-          ls -lah fabric/build/libs forge/build/libs neoforge/build/libs
+
+          if [[ "${{ steps.versions.outputs.enable_fabric }}" == "true" ]]; then
+            test -f "fabric/build/libs/realtime-sync-fabric-${MC}-${MOD}.jar"
+          fi
+          if [[ "${{ steps.versions.outputs.enable_quilt }}" == "true" ]]; then
+            test -f "quilt/build/libs/realtime-sync-quilt-${MC}-${MOD}.jar"
+          fi
+          if [[ "${{ steps.versions.outputs.enable_forge }}" == "true" ]]; then
+            test -f "forge/build/libs/realtime-sync-forge-${MC}-${MOD}.jar"
+          fi
+          if [[ "${{ steps.versions.outputs.enable_neoforge }}" == "true" ]]; then
+            test -f "neoforge/build/libs/realtime-sync-neoforge-${MC}-${MOD}.jar"
+          fi
+
+          find fabric quilt forge neoforge -path '*/build/libs/*.jar' -print -exec ls -lah {} \;
 
       - name: Upload loader jars
         uses: actions/upload-artifact@v4
@@ -154,6 +200,7 @@ jobs:
           if-no-files-found: error
           path: |
             fabric/build/libs/realtime-sync-fabric-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
+            quilt/build/libs/realtime-sync-quilt-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
             forge/build/libs/realtime-sync-forge-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
             neoforge/build/libs/realtime-sync-neoforge-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
 
@@ -161,34 +208,52 @@ jobs:
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
-          fail_on_unmatched_files: true
+          fail_on_unmatched_files: false
           files: |
             fabric/build/libs/realtime-sync-fabric-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
+            quilt/build/libs/realtime-sync-quilt-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
             forge/build/libs/realtime-sync-forge-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
             neoforge/build/libs/realtime-sync-neoforge-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
           body_path: CHANGELOG.md
 
-      - name: Publish Fabric and Quilt file to CurseForge
-        if: github.ref_type == 'tag' && env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != ''
+      - name: Publish Fabric file to CurseForge
+        if: github.ref_type == 'tag' && env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != '' && steps.versions.outputs.enable_fabric == 'true'
         uses: Kira-NT/mc-publish@v3.3
         with:
           curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
           curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
           files: fabric/build/libs/realtime-sync-fabric-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
-          name: RealtimeSync ${{ steps.versions.outputs.mod_version }} [Minecraft ${{ steps.versions.outputs.minecraft_compat_label }}] Fabric/Quilt
-          version: fabric-quilt-${{ steps.versions.outputs.mod_version }}+mc${{ steps.versions.outputs.minecraft_compat_label }}
+          name: RealtimeSync ${{ steps.versions.outputs.mod_version }} [Minecraft ${{ steps.versions.outputs.minecraft_compat_label }}] Fabric
+          version: fabric-${{ steps.versions.outputs.mod_version }}+mc${{ steps.versions.outputs.minecraft_compat_label }}
           version-type: release
           changelog-file: CHANGELOG.md
           loaders: |
             fabric
+          game-versions: |
+            ${{ steps.versions.outputs.curseforge_game_versions }}
+          java: |
+            ${{ steps.versions.outputs.curseforge_java_versions }}
+
+      - name: Publish Quilt file to CurseForge
+        if: github.ref_type == 'tag' && env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != '' && steps.versions.outputs.enable_quilt == 'true'
+        uses: Kira-NT/mc-publish@v3.3
+        with:
+          curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
+          curseforge-token: ${{ env.CURSEFORGE_TOKEN }}
+          files: quilt/build/libs/realtime-sync-quilt-${{ steps.versions.outputs.minecraft_version }}-${{ steps.versions.outputs.mod_version }}.jar
+          name: RealtimeSync ${{ steps.versions.outputs.mod_version }} [Minecraft ${{ steps.versions.outputs.minecraft_compat_label }}] Quilt
+          version: quilt-${{ steps.versions.outputs.mod_version }}+mc${{ steps.versions.outputs.minecraft_compat_label }}
+          version-type: release
+          changelog-file: CHANGELOG.md
+          loaders: |
             quilt
           game-versions: |
             ${{ steps.versions.outputs.curseforge_game_versions }}
           java: |
-            ${{ steps.versions.outputs.java_version }}
+            ${{ steps.versions.outputs.curseforge_java_versions }}
 
       - name: Publish Forge file to CurseForge
-        if: github.ref_type == 'tag' && env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != ''
+        if: github.ref_type == 'tag' && env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != '' && steps.versions.outputs.enable_forge == 'true'
         uses: Kira-NT/mc-publish@v3.3
         with:
           curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
@@ -203,10 +268,10 @@ jobs:
           game-versions: |
             ${{ steps.versions.outputs.curseforge_game_versions }}
           java: |
-            ${{ steps.versions.outputs.java_version }}
+            ${{ steps.versions.outputs.curseforge_java_versions }}
 
       - name: Publish NeoForge file to CurseForge
-        if: github.ref_type == 'tag' && env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != ''
+        if: github.ref_type == 'tag' && env.CURSEFORGE_PROJECT_ID != '' && env.CURSEFORGE_TOKEN != '' && steps.versions.outputs.enable_neoforge == 'true'
         uses: Kira-NT/mc-publish@v3.3
         with:
           curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
@@ -221,4 +286,4 @@ jobs:
           game-versions: |
             ${{ steps.versions.outputs.curseforge_game_versions }}
           java: |
-            ${{ steps.versions.outputs.java_version }}
+            ${{ steps.versions.outputs.curseforge_java_versions }}

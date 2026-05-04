@@ -24,6 +24,31 @@ ext.loadMinecraftProfile = {
     return loaded
 }
 
+ext.boolProfileProperty = { String key, boolean fallback = true ->
+    if (!rootProject.ext.has(key)) {
+        return fallback
+    }
+    return rootProject.ext.get(key).toString().toBoolean()
+}
+
+ext.isLoaderEnabled = { String loader ->
+    return rootProject.ext.boolProfileProperty("enable_${loader}".toString(), true)
+}
+
+ext.loaderTaskOrSkip = { String taskName, String loaderName, String targetPath ->
+    tasks.register(taskName) {
+        group = 'build'
+        description = "Builds the ${loaderName} jar for the selected Minecraft profile when supported."
+        if (rootProject.ext.isLoaderEnabled(loaderName.toLowerCase())) {
+            dependsOn targetPath
+        } else {
+            doLast {
+                logger.lifecycle("Skipping ${loaderName} for Minecraft ${rootProject.ext.minecraft_version}: profile disables enable_${loaderName.toLowerCase()}.")
+            }
+        }
+    }
+}
+
 def minecraftProfileProperties = loadMinecraftProfile()
 
 allprojects {
@@ -52,9 +77,6 @@ subprojects {
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     }
 
-    // Shared common resources are merged into each loader module.
-    // Keep archive tasks resilient if the same resource is accidentally present
-    // in both common and a loader-specific resources directory.
     tasks.withType(AbstractArchiveTask).configureEach {
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     }
@@ -70,32 +92,24 @@ tasks.register('printBuildProfile') {
         println "minecraft_version_range_fabric=${rootProject.ext.minecraft_version_range_fabric}"
         println "minecraft_version_range_mods_toml=${rootProject.ext.minecraft_version_range_mods_toml}"
         println "java_version=${rootProject.ext.java_version}"
+        println "fabric_loader_version=${rootProject.ext.loader_version}"
         println "fabric_version=${rootProject.ext.fabric_version}"
         println "forge_version=${rootProject.ext.forge_version}"
         println "neoforge_version=${rootProject.ext.neoforge_version}"
+        println "enable_fabric=${rootProject.ext.isLoaderEnabled('fabric')}"
+        println "enable_quilt=${rootProject.ext.isLoaderEnabled('quilt')}"
+        println "enable_forge=${rootProject.ext.isLoaderEnabled('forge')}"
+        println "enable_neoforge=${rootProject.ext.isLoaderEnabled('neoforge')}"
     }
 }
 
-tasks.register('buildFabric') {
-    group = 'build'
-    description = 'Builds the Fabric/Quilt-compatible jar for the selected Minecraft profile.'
-    dependsOn ':fabric:build'
-}
-
-tasks.register('buildForge') {
-    group = 'build'
-    description = 'Builds the Forge jar for the selected Minecraft profile.'
-    dependsOn ':forge:build'
-}
-
-tasks.register('buildNeoForge') {
-    group = 'build'
-    description = 'Builds the NeoForge jar for the selected Minecraft profile.'
-    dependsOn ':neoforge:build'
-}
+loaderTaskOrSkip('buildFabric', 'Fabric', ':fabric:build')
+loaderTaskOrSkip('buildQuilt', 'Quilt', ':quilt:build')
+loaderTaskOrSkip('buildForge', 'Forge', ':forge:build')
+loaderTaskOrSkip('buildNeoForge', 'NeoForge', ':neoforge:build')
 
 tasks.register('buildAllLoaders') {
     group = 'build'
-    description = 'Builds all supported loader jars for the selected Minecraft profile.'
-    dependsOn ':fabric:build', ':forge:build', ':neoforge:build'
+    description = 'Builds every enabled loader jar for the selected Minecraft profile.'
+    dependsOn 'buildFabric', 'buildQuilt', 'buildForge', 'buildNeoForge'
 }

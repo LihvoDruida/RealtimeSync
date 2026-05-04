@@ -12,5 +12,6 @@ fi
 for profile in "${profiles[@]}"; do
   echo "==> Building Minecraft profile ${profile}"
   ./gradlew -PmcProfile="${profile}" clean buildAllLoaders --stacktrace
-
+  echo "==> Finished Minecraft profile ${profile}"
+  echo
 done

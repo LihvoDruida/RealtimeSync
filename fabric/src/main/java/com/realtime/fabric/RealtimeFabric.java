@@ -10,8 +10,8 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.world.GameRules;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.GameRules;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -43,15 +43,15 @@ public final class RealtimeFabric implements ModInitializer {
         ServerWorldEvents.LOAD.register(this::onWorldLoad);
         ServerTickEvents.END_SERVER_TICK.register(this::onServerTick);
 
-        LOGGER.info("{} loaded for Fabric/Quilt-compatible environments. Config: {}",
+        LOGGER.info("{} loaded for Fabric-compatible environments. Config: {}",
                 RealtimeConstants.MOD_NAME,
                 configPath.toAbsolutePath());
     }
 
-    private void onWorldLoad(MinecraftServer server, ServerWorld world) {
+    private void onWorldLoad(MinecraftServer server, ServerLevel level) {
         reloadConfig(false);
         if (config.forceDaylightCycleOff) {
-            disableDaylightCycle(world, server);
+            disableDaylightCycle(level, server);
         }
 
         tickCounter = Math.max(0, config.updateInterval - 1);
@@ -81,8 +81,8 @@ public final class RealtimeFabric implements ModInitializer {
 
         try {
             if (config.forceDaylightCycleOff) {
-                for (ServerWorld world : server.getWorlds()) {
-                    disableDaylightCycle(world, server);
+                for (ServerLevel level : server.getAllLevels()) {
+                    disableDaylightCycle(level, server);
                 }
             }
 
@@ -102,28 +102,22 @@ public final class RealtimeFabric implements ModInitializer {
     }
 
     private long readOverworldTime(MinecraftServer server) {
-        ServerWorld overworld = server.getOverworld();
-        return overworld == null ? 0L : overworld.getTimeOfDay();
+        return server.overworld().getDayTime();
     }
 
     private void applyTime(MinecraftServer server, long ticks) {
         if (config.syncAllWorlds) {
-            for (ServerWorld world : server.getWorlds()) {
-                world.setTimeOfDay(ticks);
+            for (ServerLevel level : server.getAllLevels()) {
+                level.setDayTime(ticks);
             }
             return;
         }
 
-        ServerWorld overworld = server.getOverworld();
-        if (overworld == null) {
-            LOGGER.warn("Cannot synchronize time: overworld is not available yet.");
-            return;
-        }
-        overworld.setTimeOfDay(ticks);
+        server.overworld().setDayTime(ticks);
     }
 
-    private void disableDaylightCycle(ServerWorld world, MinecraftServer server) {
-        GameRules.BooleanRule rule = world.getGameRules().get(GameRules.DO_DAYLIGHT_CYCLE);
+    private void disableDaylightCycle(ServerLevel level, MinecraftServer server) {
+        GameRules.BooleanValue rule = level.getGameRules().getRule(GameRules.RULE_DAYLIGHT);
         if (rule.get()) {
             rule.set(false, server);
         }

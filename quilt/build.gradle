@@ -4,11 +4,13 @@ plugins {
 }
 
 base {
-    archivesName = "${project.archives_base_name}-fabric-${project.minecraft_version}"
+    archivesName = "${project.archives_base_name}-quilt-${project.minecraft_version}"
 }
 
 sourceSets.main.java.srcDir(rootProject.file('common/src/main/java'))
 sourceSets.main.resources.srcDir(rootProject.file('common/src/main/resources'))
+sourceSets.main.java.srcDir(rootProject.file('fabric/src/main/java'))
+sourceSets.main.resources.srcDir(rootProject.file('fabric/src/main/resources'))
 
 configurations.configureEach {
     resolutionStrategy.componentSelection {

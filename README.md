@@ -1,46 +1,47 @@
 # RealtimeSync
 
-**Synchronizes Minecraft in-game time with the server's system time or with a custom day duration.**
+**RealtimeSync** is a lightweight server-side Minecraft mod that synchronizes Minecraft world time with the server's real system time or with a configurable custom day duration.
 
-RealtimeSync is a lightweight **server-side Minecraft mod**. It disables Minecraft's vanilla daylight cycle and manually controls world time based on either the real server clock or a configurable custom day length.
+The project is built as a **multi-loader, multi-version** Gradle project. Release builds are generated per Minecraft version and per loader.
+
+## Supported Minecraft range
+
+Current profiles cover:
+
+```txt
+1.21, 1.21.1, 1.21.2, 1.21.3, 1.21.4, 1.21.5,
+1.21.6, 1.21.7, 1.21.8, 1.21.9, 1.21.10, 1.21.11
+```
+
+Each version has its own file in `buildProfiles/<minecraft-version>.properties`.
 
 ## Supported loaders
 
-RealtimeSync uses a multi-loader project layout. Do **not** upload one universal jar for every loader; publish the correct jar for each loader.
+Do **not** upload one universal jar for every loader. Publish the correct jar for the correct loader/version.
 
-| Loader | Artifact | CurseForge loader tag | Notes |
-| --- | --- | --- | --- |
-| Fabric | `realtime-sync-fabric-<mc-version>-<mod-version>.jar` | Fabric | Requires Fabric API. |
-| Quilt | `realtime-sync-fabric-<mc-version>-<mod-version>.jar` | Quilt | Uses the Fabric-compatible jar. |
-| Forge | `realtime-sync-forge-<mc-version>-<mod-version>.jar` | Forge | Native Forge entrypoint and `META-INF/mods.toml`. |
-| NeoForge | `realtime-sync-neoforge-<mc-version>-<mod-version>.jar` | NeoForge | Native NeoForge entrypoint and `META-INF/neoforge.mods.toml`. |
+| Loader | Artifact | Notes |
+| --- | --- | --- |
+| Fabric | `realtime-sync-fabric-<mc-version>-<mod-version>.jar` | Native Fabric-compatible build. Requires Fabric API. |
+| Quilt | `realtime-sync-quilt-<mc-version>-<mod-version>.jar` | Separate Quilt-tagged artifact built from the Fabric-compatible source path. Requires a Quilt setup that can load Fabric API-compatible mods. |
+| Forge | `realtime-sync-forge-<mc-version>-<mod-version>.jar` | Native Forge entrypoint and `META-INF/mods.toml`. |
+| NeoForge | `realtime-sync-neoforge-<mc-version>-<mod-version>.jar` | Native NeoForge entrypoint and `META-INF/neoforge.mods.toml`. |
+
+### Important Forge note
+
+`buildProfiles/1.21.2.properties` disables Forge with `enable_forge=false`, because there is no matching official Forge `1.21.2` artifact in the normal Forge downloads/Maven line. Fabric, Quilt-compatible and NeoForge builds remain enabled for `1.21.2`.
 
 ## Features
 
-- **Server-side only** — players do not need to install the mod on the client.
-- **Minecraft 1.21.5 build target** — release files are published with the exact Minecraft version they are built against.
-- Separate **Fabric/Quilt**, **Forge**, and **NeoForge** jars.
-- **No mixins** — safer compatibility with other mods and server environments.
-- **No Cloth Config / AutoConfig dependency** — uses a simple built-in config file.
-- **Real-time sync mode** — matches Minecraft time to the server's system clock.
-- **Custom day length mode** — allows a full Minecraft day to last a custom number of real-world minutes.
-- **Multi-dimension support** — can synchronize all loaded worlds/dimensions, not only the Overworld.
-- **Hot config reload** — the config is checked automatically about every 5 seconds.
-- **Legacy config migration** — old `config/realtime.toml` values are migrated once to the new `config/realtime.properties` file.
-
-## Compatibility
-
-Current release target:
-
-- **Minecraft**: `1.21.5`
-- **Java**: `21+`
-- **Fabric**: Fabric Loader `0.16.13+` and Fabric API `0.119.9+1.21.5`
-- **Quilt**: supported through the Fabric-compatible jar
-- **Forge**: Forge `55.1.10` for Minecraft `1.21.5`
-- **NeoForge**: NeoForge `21.5.30-beta+`
-- **Environment**: dedicated server and integrated singleplayer
-
-The loader metadata still uses safe Minecraft ranges where supported, but CurseForge files should be uploaded against the exact Minecraft version that was built and tested.
+- Server-side only; clients do not need the mod installed.
+- Per-version build profiles for the full 1.21 through 1.21.11 range.
+- Separate Fabric, Quilt-tagged, Forge and NeoForge artifacts.
+- No mixins.
+- No Cloth Config or AutoConfig dependency.
+- Real-time sync mode.
+- Custom day length mode.
+- Multi-dimension support.
+- Hot config reload.
+- Legacy `realtime.toml` migration to `realtime.properties`.
 
 ## Configuration
 
@@ -50,7 +51,7 @@ The config file is shared between all loaders:
 config/realtime.properties
 ```
 
-Example config:
+Example:
 
 ```properties
 enabled=true
@@ -62,144 +63,145 @@ customDayLengthMinutes=0
 debugLogging=false
 ```
 
-### `enabled`
+### Options
 
-- **Type**: Boolean
-- **Default**: `true`
-- **Description**: Enables or disables RealtimeSync without removing the mod.
+| Key | Default | Description |
+| --- | --- | --- |
+| `enabled` | `true` | Enables or disables the mod without removing it. |
+| `forceDaylightCycleOff` | `true` | Keeps vanilla `doDaylightCycle` disabled so the mod controls time cleanly. |
+| `syncAllWorlds` | `true` | Syncs all loaded dimensions. Set `false` to sync only the Overworld. |
+| `updateInterval` | `60` | Ticks between syncs. `20` ticks = 1 second. |
+| `offsetHours` | `0` | Shifts real-time sync by `-23..23` hours. |
+| `customDayLengthMinutes` | `0` | `0` means real clock sync. Values above `0` set a custom Minecraft day length. |
+| `debugLogging` | `false` | Enables verbose sync logs. |
 
-### `forceDaylightCycleOff`
+## Building
 
-- **Type**: Boolean
-- **Default**: `true`
-- **Description**: Keeps the vanilla `doDaylightCycle` gamerule disabled so Minecraft does not fight against the mod's manual time control.
-
-### `syncAllWorlds`
-
-- **Type**: Boolean
-- **Default**: `true`
-- **Description**: Synchronizes time for all loaded worlds/dimensions, including the Overworld, Nether, End and custom dimensions. Set this to `false` if you want to synchronize only the Overworld.
-
-### `updateInterval`
-
-- **Type**: Integer
-- **Default**: `60`
-- **Range**: `1` to `36000`
-- **Description**: The interval, in server ticks, between time updates. `20` ticks = 1 second, so `60` means the time is updated every 3 seconds.
-
-### `offsetHours`
-
-- **Type**: Integer
-- **Default**: `0`
-- **Range**: `-23` to `23`
-- **Description**: Shifts real-time synchronization by the given number of hours. Positive values move time forward, negative values move it backward. Example: `offsetHours=2` shifts the in-game time 2 hours ahead of the server clock.
-
-### `customDayLengthMinutes`
-
-- **Type**: Integer
-- **Default**: `0`
-- **Range**: `0` to `10080`
-- **Description**: Sets a custom duration for a full Minecraft day in real-world minutes. If set to `0`, the mod uses the server's system time. Example: `customDayLengthMinutes=1` makes a full Minecraft day last 1 real minute.
-
-### `debugLogging`
-
-- **Type**: Boolean
-- **Default**: `false`
-- **Description**: Enables detailed log messages for each time synchronization operation. Useful for debugging, but not recommended for normal gameplay servers.
-
-## Legacy `realtime.toml` migration
-
-Older versions used:
-
-```txt
-config/realtime.toml
-```
-
-The new version uses:
-
-```txt
-config/realtime.properties
-```
-
-If `realtime.properties` does not exist yet, RealtimeSync will try to read the old `realtime.toml` file once and create a new `realtime.properties` file with the supported values.
-
-After migration, edit `realtime.properties` instead of `realtime.toml`.
-
-## How to install
-
-### Fabric
-
-1. Download the Fabric jar.
-2. Place it in the `mods` folder of your Fabric server.
-3. Install Fabric API on the server.
-4. Start the server once to generate the config file.
-5. Edit `config/realtime.properties` if needed.
-
-### Quilt
-
-1. Download the Fabric jar.
-2. Place it in the `mods` folder of your Quilt server.
-3. Install the Fabric API / QFAPI setup required by your Quilt instance.
-4. Start the server once to generate the config file.
-5. Edit `config/realtime.properties` if needed.
-
-### Forge
-
-1. Download the Forge jar.
-2. Place it in the `mods` folder of your Forge server.
-3. Start the server once to generate the config file.
-4. Edit `config/realtime.properties` if needed.
-
-### NeoForge
-
-1. Download the NeoForge jar.
-2. Place it in the `mods` folder of your NeoForge server.
-3. Start the server once to generate the config file.
-4. Edit `config/realtime.properties` if needed.
-
-## Building from source
-
-Build everything:
+Build the default profile from `gradle.properties`:
 
 ```bash
 ./gradlew clean buildAllLoaders
 ```
 
-Build only Fabric / Quilt-compatible jar:
+Build one exact Minecraft profile:
 
 ```bash
-./gradlew clean buildFabric
+./gradlew -PmcProfile=1.21.11 clean buildAllLoaders
 ```
 
-Build only Forge jar:
+Build all profiles:
 
 ```bash
-./gradlew clean buildForge
+./scripts/build-all-profiles.sh
 ```
 
-Build only NeoForge jar:
+Build selected profiles:
 
 ```bash
-./gradlew clean buildNeoForge
+./scripts/build-all-profiles.sh 1.21.5 1.21.10 1.21.11
 ```
 
-Output jars:
+Build one loader for one profile:
+
+```bash
+./gradlew -PmcProfile=1.21.11 clean buildFabric
+./gradlew -PmcProfile=1.21.11 clean buildQuilt
+./gradlew -PmcProfile=1.21.11 clean buildForge
+./gradlew -PmcProfile=1.21.11 clean buildNeoForge
+```
+
+Output folders:
 
 ```txt
 fabric/build/libs/
+quilt/build/libs/
 forge/build/libs/
 neoforge/build/libs/
 ```
 
-## Notes
+## Version profiles
 
-- This mod is **server-side only**. Client installation is not required.
-- The mod controls time manually, so `doDaylightCycle` is disabled by default.
-- Config changes are usually picked up automatically within about 5 seconds.
-- Use `customDayLengthMinutes=0` for real server clock synchronization.
-- Use `customDayLengthMinutes>0` for a custom day duration.
-- All loader builds share the same config file and the same time calculation logic.
+A profile controls the exact Minecraft version, loader dependency versions and enabled loaders.
+
+Example:
+
+```properties
+minecraft_version=1.21.11
+minecraft_compat_label=1.21.11
+minecraft_version_range_fabric=>=1.21.11 <1.21.12
+minecraft_version_range_mods_toml=[1.21.11,1.21.12)
+java_version=21
+
+enable_fabric=true
+enable_quilt=true
+enable_forge=true
+enable_neoforge=true
+
+loader_version=0.18.4
+fabric_version=0.+
+
+forge_version=61.1.5
+forge_loader_version=[61,)
+
+neoforge_version=21.11.+
+neoforge_loader_version=[21.11,)
+```
+
+Fabric API is resolved dynamically but filtered so Gradle only accepts Fabric API builds whose version ends with the selected Minecraft version, for example `+1.21.11` for Minecraft `1.21.11`.
+
+## GitHub Actions release flow
+
+`.github/workflows/package.yml` builds every profile in the 1.21–1.21.11 range.
+
+For each profile it:
+
+1. Resolves the mod version from the Git tag.
+2. Reads `buildProfiles/<mcProfile>.properties`.
+3. Builds all enabled loader artifacts.
+4. Verifies expected jars.
+5. Uploads artifacts.
+6. Publishes release files on tag builds.
+7. Publishes Fabric, Quilt, Forge and NeoForge files to CurseForge when secrets are configured.
+
+Required secrets for CurseForge publication:
+
+```txt
+CURSEFORGE_PROJECT_ID
+CURSEFORGE_TOKEN
+```
+
+## Installation
+
+### Fabric
+
+1. Download the Fabric jar for your exact Minecraft version.
+2. Put it into the server `mods` folder.
+3. Install Fabric API for the same Minecraft version.
+4. Start the server once.
+5. Edit `config/realtime.properties` if needed.
+
+### Quilt
+
+1. Download the Quilt jar for your exact Minecraft version.
+2. Put it into the server `mods` folder.
+3. Use a Quilt setup that can load Fabric API-compatible mods for that Minecraft version.
+4. Start the server once.
+5. Edit `config/realtime.properties` if needed.
+
+### Forge
+
+1. Download the Forge jar for your exact Minecraft version.
+2. Put it into the server `mods` folder.
+3. Start the server once.
+4. Edit `config/realtime.properties` if needed.
+
+### NeoForge
+
+1. Download the NeoForge jar for your exact Minecraft version.
+2. Put it into the server `mods` folder.
+3. Start the server once.
+4. Edit `config/realtime.properties` if needed.
 
 ## License
 
-This project is currently licensed under **CC0-1.0**, according to the included [`LICENSE`](LICENSE) file and loader metadata.
+This project is licensed under **CC0-1.0**, according to the included [`LICENSE`](LICENSE) file and loader metadata.
