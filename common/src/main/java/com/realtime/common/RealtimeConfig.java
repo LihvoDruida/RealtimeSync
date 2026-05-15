@@ -137,9 +137,6 @@ public final class RealtimeConfig {
         if (overrideSleepTime && respectSleep) {
             logger.warn("Both respectSleep=true and overrideSleepTime=true are set. overrideSleepTime wins and time will keep syncing during sleep.");
         }
-        if (!syncDimensionSet.isEmpty() && !syncAllWorlds) {
-            logger.info("syncDimensions is set, so it takes priority over syncAllWorlds=false.");
-        }
 
         if (originalUpdateInterval != updateInterval) {
             logger.warn("Config value updateInterval={} is out of range. Using {}.", originalUpdateInterval, updateInterval);

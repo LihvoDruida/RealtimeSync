@@ -28,6 +28,7 @@ public final class RealtimeController {
     private int daylightRuleGuardTickCounter = 0;
     private boolean sleepSkipLogged = false;
     private long lastProcessedServerTick = RealtimeServerState.UNKNOWN_TICK;
+    private MinecraftServer activeServer;
 
     public RealtimeController(Path configDir, RealtimeLog logger) {
         this.logger = logger;
@@ -42,10 +43,21 @@ public final class RealtimeController {
     }
 
     public void onServerStarted(MinecraftServer server) {
+        activeServer = server;
+        resetRuntimeState();
+        RealtimeWorldTime.resetRuntimeState();
         reloadConfig(false);
-        tickCounter = Math.max(0, config.updateInterval - 1);
+        tickCounter = 0;
         ensureDaylightCycleOff(server, true);
         syncServerTime(server);
+    }
+
+    public void onServerStopped(MinecraftServer server) {
+        if (activeServer == server) {
+            activeServer = null;
+        }
+        resetRuntimeState();
+        RealtimeWorldTime.resetRuntimeState();
     }
 
     public void onWorldLoad(MinecraftServer server, ServerLevel level) {
@@ -57,6 +69,11 @@ public final class RealtimeController {
     }
 
     public void onServerTick(MinecraftServer server) {
+        if (activeServer != server) {
+            onServerStarted(server);
+            return;
+        }
+
         if (!markServerTick(server)) {
             return;
         }
@@ -205,14 +222,21 @@ public final class RealtimeController {
 
         daylightRuleGuardTickCounter = 0;
         for (ServerLevel level : server.getAllLevels()) {
-            if (shouldSyncLevel(level)) {
-                if (!gameRules.disableDaylightCycle(level, server)) {
-            RealtimeWorldTime.pauseClock(server, level, logger);
-        }
+            if (shouldSyncLevel(level) && !gameRules.disableDaylightCycle(level, server)) {
+                RealtimeWorldTime.pauseClock(server, level, logger);
             }
         }
     }
 
+    private void resetRuntimeState() {
+        tickCounter = 0;
+        configReloadTickCounter = 0;
+        daylightRuleGuardTickCounter = 0;
+        sleepSkipLogged = false;
+        lastProcessedServerTick = RealtimeServerState.UNKNOWN_TICK;
+        timeMath.resetCustomTicks();
+        gameRules.resetWarningState();
+    }
 
     private boolean markServerTick(MinecraftServer server) {
         long serverTick = RealtimeServerState.tickCount(server);

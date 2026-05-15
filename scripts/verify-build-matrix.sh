@@ -12,13 +12,14 @@ fail() {
 [[ -s config/build-compatibility.lock.json ]] || fail "Missing config/build-compatibility.lock.json"
 python3 scripts/validate-build-profiles.py
 python3 scripts/validate-dependency-artifacts.py
-python3 -m py_compile \
+python3 -B -m py_compile \
   scripts/generate-ci-matrix.py \
   scripts/validate-build-profiles.py \
   scripts/validate-dependency-artifacts.py \
   scripts/validate-jar-metadata.py \
   scripts/check-ci-matrix.py \
   scripts/check-fabric-loom-1-21.py
+find scripts -type d -name __pycache__ -prune -exec rm -rf {} +
 python3 scripts/generate-ci-matrix.py >/tmp/realtime-sync-matrix.json
 python3 scripts/check-ci-matrix.py
 python3 scripts/check-fabric-loom-1-21.py

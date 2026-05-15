@@ -27,6 +27,11 @@ public final class RealtimeWorldTime {
     private RealtimeWorldTime() {
     }
 
+    public static void resetRuntimeState() {
+        FALLBACK_TIMES.clear();
+        CLOCKS_PAUSED.clear();
+    }
+
     public static long readOverworldTime(MinecraftServer server) {
         ServerLevel fallback = null;
         for (ServerLevel level : server.getAllLevels()) {
@@ -108,11 +113,14 @@ public final class RealtimeWorldTime {
     public static String dimensionId(ServerLevel level) {
         Method method = DIMENSION_METHODS.computeIfAbsent(level.getClass(), type -> findZeroArgMethod(type, "dimension"));
         Object dimension = method == null ? null : invoke(method, level);
-        return normalizeDimensionId(String.valueOf(dimension));
+        return normalizeDimensionId(dimension == null ? null : dimension.toString());
     }
 
     static String normalizeDimensionId(String raw) {
         String normalized = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+        if (normalized.equals("null")) {
+            normalized = "";
+        }
         int registrySeparator = normalized.lastIndexOf(" / ");
         if (registrySeparator >= 0) {
             normalized = normalized.substring(registrySeparator + 3);

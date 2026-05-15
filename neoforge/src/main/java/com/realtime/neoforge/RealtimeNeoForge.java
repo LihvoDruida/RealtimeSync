@@ -11,6 +11,7 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.level.LevelEvent;
+import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -30,6 +31,7 @@ public final class RealtimeNeoForge {
 
         NeoForge.EVENT_BUS.addListener(this::onLevelLoad);
         NeoForge.EVENT_BUS.addListener(this::onLevelTick);
+        NeoForge.EVENT_BUS.addListener(this::onServerStopped);
 
         LOGGER.info("{} loaded for NeoForge. Config: {}", RealtimeConstants.MOD_NAME, controller.configPath().toAbsolutePath());
     }
@@ -43,6 +45,10 @@ public final class RealtimeNeoForge {
         if (server != null) {
             controller.onWorldLoad(server, level);
         }
+    }
+
+    private void onServerStopped(ServerStoppedEvent event) {
+        controller.onServerStopped(event.getServer());
     }
 
     private void onLevelTick(LevelTickEvent.Post event) {

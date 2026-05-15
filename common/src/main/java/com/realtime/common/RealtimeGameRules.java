@@ -53,6 +53,7 @@ public final class RealtimeGameRules {
 
         Resolution resolved = resolve(gameRules, server, value);
         if (resolved == null) {
+            warnMissingRuleOnce();
             return false;
         }
 

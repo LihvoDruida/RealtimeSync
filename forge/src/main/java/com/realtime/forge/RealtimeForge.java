@@ -45,6 +45,9 @@ public final class RealtimeForge {
     private void queueServerTick() {
         MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
         if (server == null) {
+            if (activeServer != null) {
+                controller.onServerStopped(activeServer);
+            }
             activeServer = null;
             serverWorkQueued.set(false);
             return;

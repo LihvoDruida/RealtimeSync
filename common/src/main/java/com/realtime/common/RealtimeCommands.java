@@ -34,6 +34,10 @@ public final class RealtimeCommands {
             Object commands = getCommands.invoke(server);
             Object source = createSource.invoke(server);
             Object suppressedSource = suppressOutput(source);
+            if (commands == null || suppressedSource == null) {
+                logger.warn("Could not execute Minecraft command '{}': command dispatcher or source was null.", command);
+                return false;
+            }
             Method execute = COMMAND_EXECUTE_METHODS.computeIfAbsent(commands.getClass(), type -> findCommandExecuteMethod(type, suppressedSource.getClass()));
             if (execute == null) {
                 logger.warn("Could not execute Minecraft command '{}': no compatible execute method was found on {}.", command, commands.getClass().getName());
