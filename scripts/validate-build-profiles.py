@@ -165,10 +165,16 @@ def main() -> int:
             fail(f"{gradle_file}: processResources must expand fabric_version into fabric.mod.json")
 
     neoforge_toml = (ROOT / "neoforge/src/main/resources/META-INF/neoforge.mods.toml").read_text(encoding="utf-8")
-    if 'loaderVersion="${neoforge_loader_version}"' not in neoforge_toml:
-        fail("neoforge.mods.toml must keep javafml loaderVersion separate from NeoForge dependency versionRange")
+    if 'loaderVersion="[1,)"' not in neoforge_toml:
+        fail("neoforge.mods.toml must hard-code javafml loaderVersion=[1,) so NeoForge runtime ranges cannot leak into language-provider checks")
+    if 'loaderVersion="${' in neoforge_toml:
+        fail("neoforge.mods.toml must not expand loaderVersion from Gradle properties")
     if 'versionRange="${neoforge_version_range}"' not in neoforge_toml:
         fail("neoforge.mods.toml must use neoforge_version_range for the NeoForge runtime dependency")
+
+    neoforge_gradle = (ROOT / "neoforge/build.gradle").read_text(encoding="utf-8")
+    if "neoforgeDependencyVersionRange" in neoforge_gradle or ": project.neoforge_loader_version" in neoforge_gradle:
+        fail("neoforge/build.gradle must not fall back from neoforge_version_range to neoforge_loader_version")
 
     print("Build profile dependency validation passed.")
     return 0

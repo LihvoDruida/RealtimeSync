@@ -232,7 +232,7 @@ Fabric API is pinned to an exact artifact per profile and is also declared as a 
 
 NeoForge keeps two ranges separate:
 
-- `neoforge_loader_version=[1,)` is the `javafml` language-loader range used by `loaderVersion`;
+- `neoforge_loader_version=[1,)` documents the `javafml` language-loader floor; `neoforge.mods.toml` hard-codes `loaderVersion="[1,)"` so runtime NeoForge ranges cannot leak into this field;
 - `neoforge_version_range=[21.x,)` is the actual NeoForge runtime dependency range used by `[[dependencies.realtime]]`.
 
 ## GitHub Actions release flow
@@ -331,7 +331,7 @@ Important rules:
 - Fabric API is pinned per Minecraft profile instead of `0.+` and exposed as a minimum runtime dependency instead of `*`.
 - Forge `1.21.2` is intentionally disabled because the active Forge downloads list does not provide a normal Forge artifact for that Minecraft version.
 - Forge `1.21.10` is pinned to `60.1.0` instead of latest `60.1.9`, because `60.1.9` can fail in ForgeGradle Mavenizer on GitHub-hosted runners.
-- NeoForge uses `loaderVersion=[1,)` for `javafml` and `neoforge_version_range=[21.x,)` for the NeoForge dependency itself.
+- NeoForge uses hard-coded `loaderVersion=[1,)` for `javafml` and `neoforge_version_range=[21.x,)` for the NeoForge dependency itself.
 - Every active profile uses Java 21.
 
 ## Compatibility lock and supported matrix

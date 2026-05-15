@@ -60,5 +60,5 @@ NeoForge versions are pinned exactly. Do not use wildcard versions such as `21.x
 
 NeoForge metadata must keep the language loader and runtime dependency ranges separate:
 
-- `neoforge_loader_version=[1,)` maps to `modLoader="javafml"` / `loaderVersion`;
+- `neoforge_loader_version=[1,)` documents the JavaFML language-loader floor, but `neoforge.mods.toml` hard-codes `loaderVersion="[1,)"`;
 - `neoforge_version_range=[21.x,)` maps to the required `neoforge` dependency range.

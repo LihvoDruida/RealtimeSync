@@ -1,5 +1,5 @@
 modLoader="javafml"
-loaderVersion="${neoforge_loader_version}"
+loaderVersion="[1,)"
 license="CC0-1.0"
 issueTrackerURL="https://github.com/LihvoDruida/RealtimeSync/issues"
 

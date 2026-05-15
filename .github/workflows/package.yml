@@ -47,6 +47,10 @@ jobs:
         shell: bash
         run: python3 scripts/validate-build-profiles.py
 
+      - name: Validate entrypoints and loader metadata
+        shell: bash
+        run: python3 scripts/validate-entrypoints.py
+
       - name: Validate dependency coordinates offline
         shell: bash
         run: python3 scripts/validate-dependency-artifacts.py

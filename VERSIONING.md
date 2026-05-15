@@ -63,7 +63,7 @@ forge_version=61.1.5
 forge_loader_version=[61,)
 
 neoforge_version=21.11.0-beta
-neoforge_loader_version=[21.11,)
+neoforge_loader_version=[1,)
 ```
 
 ## Fabric API resolution

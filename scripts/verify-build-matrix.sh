@@ -11,10 +11,12 @@ fail() {
 
 [[ -s config/build-compatibility.lock.json ]] || fail "Missing config/build-compatibility.lock.json"
 python3 scripts/validate-build-profiles.py
+python3 scripts/validate-entrypoints.py
 python3 scripts/validate-dependency-artifacts.py
 python3 -B -m py_compile \
   scripts/generate-ci-matrix.py \
   scripts/validate-build-profiles.py \
+  scripts/validate-entrypoints.py \
   scripts/validate-dependency-artifacts.py \
   scripts/validate-jar-metadata.py \
   scripts/check-ci-matrix.py \

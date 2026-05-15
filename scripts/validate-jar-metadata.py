@@ -94,12 +94,36 @@ def validate_common_entries(jar: zipfile.ZipFile, loader: str, jar_path: Path) -
         fail(f"{jar_path} missing assets/realtime/icon.png")
     if not any(name.endswith("RealtimeController.class") for name in names):
         fail(f"{jar_path} does not contain common RealtimeController class")
-    if loader in {"fabric", "quilt"} and "fabric.mod.json" not in names:
-        fail(f"{jar_path} missing fabric.mod.json")
-    if loader == "forge" and "META-INF/mods.toml" not in names:
-        fail(f"{jar_path} missing META-INF/mods.toml")
-    if loader == "neoforge" and "META-INF/neoforge.mods.toml" not in names:
-        fail(f"{jar_path} missing META-INF/neoforge.mods.toml")
+
+    expected_metadata = {
+        "fabric": {"fabric.mod.json"},
+        "quilt": {"fabric.mod.json"},
+        "forge": {"META-INF/mods.toml"},
+        "neoforge": {"META-INF/neoforge.mods.toml"},
+    }[loader]
+    known_metadata = {"fabric.mod.json", "META-INF/mods.toml", "META-INF/neoforge.mods.toml"}
+    actual_metadata = names & known_metadata
+    if actual_metadata != expected_metadata:
+        fail(f"{jar_path} has wrong loader metadata. expected={sorted(expected_metadata)}, actual={sorted(actual_metadata)}")
+
+    expected_entrypoint_class = {
+        "fabric": "com/realtime/fabric/RealtimeFabric.class",
+        "quilt": "com/realtime/fabric/RealtimeFabric.class",
+        "forge": "com/realtime/forge/RealtimeForge.class",
+        "neoforge": "com/realtime/neoforge/RealtimeNeoForge.class",
+    }[loader]
+    if expected_entrypoint_class not in names:
+        fail(f"{jar_path} missing entrypoint class {expected_entrypoint_class}")
+
+    forbidden_entrypoints = {
+        "fabric": {"com/realtime/forge/RealtimeForge.class", "com/realtime/neoforge/RealtimeNeoForge.class"},
+        "quilt": {"com/realtime/forge/RealtimeForge.class", "com/realtime/neoforge/RealtimeNeoForge.class"},
+        "forge": {"com/realtime/fabric/RealtimeFabric.class", "com/realtime/neoforge/RealtimeNeoForge.class"},
+        "neoforge": {"com/realtime/fabric/RealtimeFabric.class", "com/realtime/forge/RealtimeForge.class"},
+    }[loader]
+    leaked = sorted(forbidden_entrypoints & names)
+    if leaked:
+        fail(f"{jar_path} contains wrong-loader entrypoint class(es): {leaked}")
 
 
 def main() -> None:
