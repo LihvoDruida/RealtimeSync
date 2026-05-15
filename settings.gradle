@@ -65,7 +65,7 @@ rootProject.name = 'RealtimeSync'
 
 // CI builds exactly one loader per matrix entry. Keeping every loader included for
 // metadata-only tasks causes unrelated loaders to configure and resolve their
-// userdev artifacts. This is especially expensive and fragile for Forge 1.21.10,
+// userdev artifacts. This is especially expensive and fragile for newer Forge runtimes,
 // where ForgeGradle/Mavenizer performs a full Minecraft recompile during project
 // configuration. Use -PtargetLoader=<fabric|quilt|forge|neoforge> to include one
 // loader, -PtargetLoader=all for local buildAllLoaders, or -PtargetLoader=none for

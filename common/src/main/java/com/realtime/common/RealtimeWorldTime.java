@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentMap;
 /**
  * Cross-version world time access.
  *
- * <p>The 1.21.x profiles expose day-time through level/level-data APIs, but
+ * <p>The modern profiles expose day-time through level/level-data APIs, but
  * method names and mappings are not stable across the whole range. This helper
  * resolves compatible accessors reflectively and keeps a command-backed fallback
  * for custom or future server runtimes.</p>

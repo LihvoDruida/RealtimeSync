@@ -103,7 +103,7 @@ public final class RealtimeGameRules {
                     }
                 }
             } catch (ReflectiveOperationException | RuntimeException ignored) {
-                // Try the next Minecraft 1.21.x gamerule key name or setter shape.
+                // Try the next modern Minecraft gamerule key name or setter shape.
             }
         }
 

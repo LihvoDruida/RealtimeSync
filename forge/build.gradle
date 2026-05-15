@@ -19,7 +19,7 @@ sourceSets.main.resources.srcDir(rootProject.file('common/src/main/resources'))
 
 repositories {
     // ForgeGradle 7 exposes these repository helpers after the plugin is applied.
-    // They avoid missing userdev/Minecraft library artifacts on newer 1.21.x lines.
+    // They avoid missing userdev/Minecraft library artifacts on newer runtime lines.
     maven minecraft.mavenizer
     maven fg.forgeMaven
     maven fg.minecraftLibsMaven
