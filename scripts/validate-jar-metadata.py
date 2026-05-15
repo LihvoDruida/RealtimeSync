@@ -58,8 +58,17 @@ def expected_mods_toml_minecraft_range(minecraft_version: str) -> str:
     return f"[{beta_lower_bound(minecraft_version)},{next_minecraft_version(minecraft_version)})"
 
 
+def neoforge_beta_lower_bound(minecraft_version: str) -> str:
+    if "-" in minecraft_version:
+        return minecraft_version
+    parts = minecraft_version.split(".")
+    while len(parts) < 3:
+        parts.append("0")
+    return f"{'.'.join(parts)}.0-beta"
+
+
 def expected_open_ended_runtime_range(minecraft_version: str) -> str:
-    return f"[{beta_lower_bound(minecraft_version)},)"
+    return f"[{neoforge_beta_lower_bound(minecraft_version)},)"
 
 
 def validate_fabric_like(jar: zipfile.ZipFile, loader: str, minecraft_version: str, mod_version: str) -> None:

@@ -34,10 +34,10 @@ def require(props: dict[str, str], path: Path, key: str) -> str:
     return props[key]
 
 
-def beta_lower_bound(runtime_min_version: str, accept_beta: bool) -> str:
+def beta_lower_bound(runtime_min_version: str, accept_beta: bool, beta_suffix: str = "-0-beta") -> str:
     lower_bound = runtime_min_version
     if accept_beta and "-" not in lower_bound:
-        lower_bound = f"{lower_bound}-0-beta"
+        lower_bound = f"{lower_bound}{beta_suffix}"
     return lower_bound
 
 
@@ -49,8 +49,21 @@ def derive_fabric_range(runtime_min_version: str, runtime_max_version: str, acce
     return f">={beta_lower_bound(runtime_min_version, accept_beta)} <{runtime_max_version}"
 
 
-def derive_open_ended_range(runtime_min_version: str, accept_beta: bool) -> str:
-    return f"[{beta_lower_bound(runtime_min_version, accept_beta)},)"
+def derive_open_ended_range(runtime_min_version: str, accept_beta: bool, beta_suffix: str = "-0-beta") -> str:
+    return f"[{beta_lower_bound(runtime_min_version, accept_beta, beta_suffix)},)"
+
+
+def neoforge_beta_lower_bound(runtime_min_version: str, accept_beta: bool) -> str:
+    if not accept_beta or "-" in runtime_min_version:
+        return runtime_min_version
+    parts = runtime_min_version.split(".")
+    while len(parts) < 3:
+        parts.append("0")
+    return f"{'.'.join(parts)}.0-beta"
+
+
+def derive_neoforge_open_ended_range(runtime_min_version: str, accept_beta: bool) -> str:
+    return f"[{neoforge_beta_lower_bound(runtime_min_version, accept_beta)},)"
 
 
 def main() -> int:
@@ -193,7 +206,7 @@ def main() -> int:
         accept_beta_value = require(props, path, "neoforge_accept_beta")
         if accept_beta_value not in {"true", "false"}:
             fail(f"{path}: neoforge_accept_beta must be true or false")
-        actual_neoforge_range = derive_open_ended_range(runtime_min_version, accept_beta_value == "true")
+        actual_neoforge_range = derive_neoforge_open_ended_range(runtime_min_version, accept_beta_value == "true")
         if props.get("neoforge_version_range"):
             fail(f"{path}: neoforge_version_range must be derived from neoforge_runtime_min_version and neoforge_accept_beta, not hard-coded in the profile")
         if not expected_neoforge_range or actual_neoforge_range != expected_neoforge_range:

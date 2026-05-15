@@ -105,7 +105,7 @@ Fabric / Quilt: >=26.1.2-0-beta <26.1.3
 Forge / NeoForge: [26.1.2-0-beta,26.1.3)
 ```
 
-So the same jar can load on `26.1.2-0-beta` style runtimes and later stable `26.1.2` builds, but it still stops before `26.1.3`.
+So the same jar can load on `26.1.2-0-beta` style Minecraft predicates and later stable `26.1.2` builds, but it still stops before `26.1.3`.
 
 ## Fabric and Quilt notes
 
@@ -143,7 +143,7 @@ neoforge_runtime_min_version=26.1.2
 neoforge_accept_beta=true
 ```
 
-For `26.1.2`, this produces the NeoForge runtime dependency `versionRange="[26.1.2-0-beta,)"`, so both `26.1.2-0-beta` and later stable `26.1.2` NeoForge runtimes are accepted.
+For `26.1.2`, this produces the NeoForge runtime dependency `versionRange="[26.1.2.0-beta,)"`, so both `26.1.2.0-beta`, `26.1.2.48-beta` and later stable `26.1.2` NeoForge runtimes are accepted.
 
 Do not put `26.1.x` into `loaderVersion`. That recreates the `needs language provider javafml@...` loading error.
 

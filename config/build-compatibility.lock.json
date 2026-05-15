@@ -5,8 +5,8 @@
     "branch": "mc-26.1.x",
     "java": "Minecraft 26.1.x profiles use Java 25.",
     "fabricMappings": "Minecraft 26.1.x Fabric/Quilt builds use Fabric Loom without mappings/remap dependencies because the game is distributed in the official namespace.",
-    "neoforgeMetadata": "NeoForge modLoader=javafml uses loaderVersion [1,), while the NeoForge runtime dependency range is derived from neoforge_runtime_min_version plus neoforge_accept_beta=true.",
-    "minecraftRuntimeMetadata": "Minecraft dependency ranges for Fabric, Quilt, Forge and NeoForge are derived from minecraft_runtime_min_version, minecraft_runtime_max_version and minecraft_accept_beta=true. This accepts beta runtimes such as 26.1.2-0-beta and later stable runtimes before the next profile boundary."
+    "neoforgeMetadata": "NeoForge modLoader=javafml uses loaderVersion [1,), while the NeoForge runtime dependency range is derived from neoforge_runtime_min_version plus neoforge_accept_beta=true using the NeoForge dotted beta format, for example 26.1.2.0-beta.",
+    "minecraftRuntimeMetadata": "Minecraft dependency ranges for Fabric, Quilt, Forge and NeoForge are derived from minecraft_runtime_min_version, minecraft_runtime_max_version and minecraft_accept_beta=true. This accepts beta-style Minecraft predicates such as 26.1.2-0-beta and later stable runtimes before the next profile boundary; NeoForge runtime dependency ranges use the dotted beta form such as 26.1.2.0-beta."
   },
   "loaders": [
     "fabric",
@@ -51,7 +51,7 @@
           "supported": true,
           "version": "26.1.0.19-beta",
           "loaderRange": "[1,)",
-          "versionRange": "[26.1-0-beta,)",
+          "versionRange": "[26.1.0.0-beta,)",
           "artifact": "net.neoforged:neoforge:26.1.0.19-beta",
           "notes": "NeoForge ModDev build with javafml loader range, derived beta-compatible Minecraft dependency metadata and derived beta-compatible NeoForge runtime dependency range.",
           "runtimeMinVersion": "26.1",
@@ -105,7 +105,7 @@
           "supported": true,
           "version": "26.1.1.15-beta",
           "loaderRange": "[1,)",
-          "versionRange": "[26.1.1-0-beta,)",
+          "versionRange": "[26.1.1.0-beta,)",
           "artifact": "net.neoforged:neoforge:26.1.1.15-beta",
           "notes": "NeoForge ModDev build with javafml loader range, derived beta-compatible Minecraft dependency metadata and derived beta-compatible NeoForge runtime dependency range.",
           "runtimeMinVersion": "26.1.1",
@@ -159,7 +159,7 @@
           "supported": true,
           "version": "26.1.2.48-beta",
           "loaderRange": "[1,)",
-          "versionRange": "[26.1.2-0-beta,)",
+          "versionRange": "[26.1.2.0-beta,)",
           "artifact": "net.neoforged:neoforge:26.1.2.48-beta",
           "notes": "NeoForge ModDev build with javafml loader range, derived beta-compatible Minecraft dependency metadata and derived beta-compatible NeoForge runtime dependency range.",
           "runtimeMinVersion": "26.1.2",

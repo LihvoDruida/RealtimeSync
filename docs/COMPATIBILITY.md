@@ -61,12 +61,12 @@ loaderVersion="[1,)"
 NeoForge runtime compatibility is derived from `neoforge_runtime_min_version` plus `neoforge_accept_beta=true`:
 
 ```text
-26.1   -> min 26.1   -> [26.1-0-beta,)
-26.1.1 -> min 26.1.1 -> [26.1.1-0-beta,)
-26.1.2 -> min 26.1.2 -> [26.1.2-0-beta,)
+26.1   -> min 26.1   -> [26.1.0.0-beta,)
+26.1.1 -> min 26.1.1 -> [26.1.1.0-beta,)
+26.1.2 -> min 26.1.2 -> [26.1.2.0-beta,)
 ```
 
-That lower bound accepts the current `*-beta` NeoForge runtimes and keeps the same jar compatible with later stable NeoForge runtimes in the same Minecraft line.
+That dotted lower bound accepts the current `*.0-beta` / `*.NN-beta` NeoForge runtimes and keeps the same jar compatible with later stable NeoForge runtimes in the same Minecraft line.
 
 
 ## Release trigger

@@ -38,12 +38,30 @@ ext.stringProfileProperty = { String key, String fallback = '' ->
     return rootProject.ext.get(key).toString().trim()
 }
 
-ext.betaCompatibleLowerBound = { String minimumVersion, boolean acceptBeta, String displayName ->
+ext.betaCompatibleLowerBound = { String minimumVersion, boolean acceptBeta, String displayName, String betaSuffix = '-0-beta' ->
     String value = minimumVersion == null ? '' : minimumVersion.toString().trim()
     if (value.isEmpty()) {
         throw new GradleException("Missing ${displayName} minimum version in the selected build profile.")
     }
-    return acceptBeta && !value.contains('-') ? "${value}-0-beta" : value
+    return acceptBeta && !value.contains('-') ? "${value}${betaSuffix}" : value
+}
+
+// NeoForge uses a dotted runtime version line: <minecraft>.<build>-beta.
+// For example, Minecraft 26.1.2 beta runtime is 26.1.2.0-beta, not 26.1.2-0-beta.
+ext.neoForgeBetaCompatibleLowerBound = { String minimumVersion, boolean acceptBeta ->
+    String value = minimumVersion == null ? '' : minimumVersion.toString().trim()
+    if (value.isEmpty()) {
+        throw new GradleException('Missing NeoForge runtime minimum version in the selected build profile.')
+    }
+    if (!acceptBeta || value.contains('-')) {
+        return value
+    }
+
+    List<String> parts = value.tokenize('.')
+    while (parts.size() < 3) {
+        parts.add('0')
+    }
+    return "${parts.join('.')}.0-beta"
 }
 
 ext.isLoaderEnabled = { String loader ->
@@ -90,7 +108,7 @@ ext.resolveNeoForgeVersionRange = {
 
     String minimumVersion = rootProject.ext.stringProfileProperty('neoforge_runtime_min_version', rootProject.ext.stringProfileProperty('minecraft_version'))
     boolean acceptBeta = rootProject.ext.boolProfileProperty('neoforge_accept_beta', true)
-    String lowerBound = rootProject.ext.betaCompatibleLowerBound(minimumVersion, acceptBeta, 'NeoForge runtime')
+    String lowerBound = rootProject.ext.neoForgeBetaCompatibleLowerBound(minimumVersion, acceptBeta)
     return "[${lowerBound},)"
 }
 
