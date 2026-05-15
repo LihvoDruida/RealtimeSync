@@ -57,8 +57,16 @@ def main() -> int:
 
     workflow = (ROOT / ".github/workflows/package.yml").read_text(encoding="utf-8")
     old_branch = "mc-" + "1" + ".21.x"
-    if "mc-26.1.x" not in workflow or old_branch in workflow:
-        fail("Workflow must target mc-26.1.x and must not target the old stable branch")
+    if old_branch in workflow:
+        fail("Workflow must not target the old stable branch")
+    if "workflow_dispatch" in workflow:
+        fail("Release workflow must not allow manual dispatch on the mc-26.1.x branch; builds run only from v* tags")
+    if re.search(r"(?m)^\s*branches:\s*$", workflow):
+        fail("Release workflow must not run on branch pushes; builds run only from v* tags")
+    if "tags:" not in workflow or "'v*'" not in workflow:
+        fail("Release workflow must run only when a v* tag is pushed")
+    if "0.0.0-dev" in workflow:
+        fail("Release workflow must not create dev artifacts; all builds must resolve the version from the v* tag")
     if "generate-ci-matrix.py --github-output" not in workflow:
         fail("Workflow must generate matrix from config/build-compatibility.lock.json")
 

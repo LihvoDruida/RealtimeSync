@@ -54,6 +54,11 @@ NeoForge runtime compatibility is handled by `neoforge_version_range`:
 26.1.2 -> [26.1.2,)
 ```
 
+
+## Release trigger
+
+The `mc-26.1.x` GitHub Actions workflow is release-only. It runs only when a tag matching `v*` is pushed. Branch pushes and manual workflow dispatch are intentionally disabled so every produced artifact has a real release version.
+
 ## Guardrails
 
 `bash scripts/verify-build-matrix.sh` checks:

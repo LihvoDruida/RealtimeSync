@@ -2,16 +2,8 @@ name: Build and Release
 
 on:
   push:
-    branches:
-      - mc-26.1.x
     tags:
       - 'v*'
-  workflow_dispatch:
-    inputs:
-      verify_dependencies_online:
-        description: 'Probe Maven dependency artifacts online before building'
-        type: boolean
-        default: false
 
 permissions:
   contents: write
@@ -54,11 +46,6 @@ jobs:
       - name: Validate dependency coordinates offline
         shell: bash
         run: python3 scripts/validate-dependency-artifacts.py
-
-      - name: Validate dependency artifacts online
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_dependencies_online }}
-        shell: bash
-        run: python3 scripts/validate-dependency-artifacts.py --online
 
       - name: Verify build matrix guardrails
         shell: bash
@@ -116,17 +103,18 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            TAG="${GITHUB_REF_NAME}"
-            if [[ "${TAG}" != v* ]]; then
-              echo "This workflow tag must use v* format. Current tag: ${TAG}" >&2
-              exit 1
-            fi
-            MOD_VERSION="${TAG#v}"
-          else
-            MOD_VERSION="0.0.0-dev.${GITHUB_RUN_NUMBER}"
+          if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
+            echo "This workflow only supports v* tag builds. Current ref type: ${GITHUB_REF_TYPE}" >&2
+            exit 1
           fi
 
+          TAG="${GITHUB_REF_NAME}"
+          if [[ "${TAG}" != v* ]]; then
+            echo "This workflow tag must use v* format. Current tag: ${TAG}" >&2
+            exit 1
+          fi
+
+          MOD_VERSION="${TAG#v}"
           if [[ -z "${MOD_VERSION}" ]]; then
             echo "Could not resolve mod version. Expected tag format like v1.5.5" >&2
             exit 1

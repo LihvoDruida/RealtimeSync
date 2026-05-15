@@ -125,6 +125,20 @@ versionRange="${neoforge_version_range}"
 
 Do not put `26.1.x` into `loaderVersion`. That recreates the `needs language provider javafml@...` loading error.
 
+
+## Release workflow
+
+GitHub Actions builds this branch only when a `v*` tag is pushed. Regular pushes to `mc-26.1.x` do not start CI builds, and manual `workflow_dispatch` is disabled for this branch.
+
+```bash
+git checkout mc-26.1.x
+git pull origin mc-26.1.x
+git tag v1.4.0
+git push origin v1.4.0
+```
+
+The tag is the release version source. The workflow fails on non-tag refs instead of producing `0.0.0-dev` artifacts.
+
 ## Runtime compatibility policy
 
 Common runtime code avoids direct calls to APIs that are fragile across loaders:
