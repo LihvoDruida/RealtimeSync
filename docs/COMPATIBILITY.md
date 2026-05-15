@@ -39,6 +39,7 @@ Rules:
 
 - keep Fabric Loader and Fabric API pinned exactly;
 - keep the Fabric API suffix matched to the selected Minecraft version;
+- expose Fabric API in `fabric.mod.json` as `>=${fabric_version}`, never `*`;
 - use `modImplementation` for Fabric Loader and Fabric API;
 - do not reintroduce a `26.x` Loom branch in this repository branch.
 
@@ -56,3 +57,8 @@ The mod avoids direct APIs that moved or changed across the `1.21.x` profile ran
 Forge `1.21.2` is disabled because no matching normal Forge artifact is available for that profile. Forge `1.21.10` is pinned to `60.1.0` because newer artifacts can fail during ForgeGradle Mavenizer resolution on GitHub-hosted runners.
 
 NeoForge versions are pinned exactly. Do not use wildcard versions such as `21.x.+` with ModDev/NeoForm because they can resolve as literal userdev artifact coordinates in this setup.
+
+NeoForge metadata must keep the language loader and runtime dependency ranges separate:
+
+- `neoforge_loader_version=[1,)` maps to `modLoader="javafml"` / `loaderVersion`;
+- `neoforge_version_range=[21.x,)` maps to the required `neoforge` dependency range.

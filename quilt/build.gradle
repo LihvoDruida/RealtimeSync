@@ -44,6 +44,7 @@ dependencies {
 processResources {
     inputs.property 'version', project.version
     inputs.property 'loader_version', project.loader_version
+    inputs.property 'fabric_version', project.fabric_version
     inputs.property 'minecraft_version_range_fabric', project.minecraft_version_range_fabric
     inputs.property 'java_version', project.java_version
 
@@ -51,6 +52,7 @@ processResources {
         expand(
                 version: project.version,
                 loader_version: project.loader_version,
+                fabric_version: project.fabric_version,
                 minecraft_version_range_fabric: project.minecraft_version_range_fabric,
                 java_version: project.java_version
         )

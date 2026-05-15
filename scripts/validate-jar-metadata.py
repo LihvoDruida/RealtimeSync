@@ -57,6 +57,11 @@ def validate_fabric_like(jar: zipfile.ZipFile, loader: str, minecraft_version: s
         fail(f"{path} minecraft dependency {minecraft_range!r} does not mention {minecraft_version!r}")
     if "java" not in depends:
         fail(f"{path} missing java dependency")
+    fabric_api_range = str(depends.get("fabric-api", ""))
+    if not fabric_api_range.startswith(">=0.") or "+" not in fabric_api_range:
+        fail(f"{path} Fabric API dependency must be a minimum pinned range such as >=0.xxx.x+{minecraft_version}, got {fabric_api_range!r}")
+    if minecraft_version not in fabric_api_range:
+        fail(f"{path} Fabric API dependency {fabric_api_range!r} does not mention {minecraft_version!r}")
 
     entrypoints = metadata.get("entrypoints") or {}
     main = entrypoints.get("main") or []
@@ -77,6 +82,10 @@ def validate_mods_toml(jar: zipfile.ZipFile, path: str, platform_mod_id: str, mi
     assert_contains(text, f'modId="{platform_mod_id}"', path)
     assert_contains(text, 'modId="minecraft"', path)
     assert_contains(text, minecraft_version, path)
+    if platform_mod_id == "neoforge":
+        assert_contains(text, 'loaderVersion="[1,)"', path)
+        expected_minor = "0" if minecraft_version == "1.21" else minecraft_version.split(".")[2]
+        assert_contains(text, f'versionRange="[21.{expected_minor},)"', path)
 
 
 def validate_common_entries(jar: zipfile.ZipFile, loader: str, jar_path: Path) -> None:

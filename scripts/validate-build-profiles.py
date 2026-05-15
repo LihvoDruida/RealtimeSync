@@ -125,12 +125,17 @@ def main() -> int:
             fail(f"{path}: neoforge_version disagrees with compatibility lock")
         if re.search(r"[.+]$", props["neoforge_version"]):
             fail(f"{path}: neoforge_version must be exact, not a wildcard/range")
-        if require(props, path, "neoforge_loader_version") != neoforge.get("loaderRange"):
+        neoforge_loader_range = require(props, path, "neoforge_loader_version")
+        if neoforge_loader_range != neoforge.get("loaderRange"):
             fail(f"{path}: neoforge_loader_version disagrees with compatibility lock")
+        if neoforge_loader_range != "[1,)":
+            fail(f"{path}: NeoForge modLoader=javafml loaderVersion must describe the javafml language loader range [1,), not the NeoForge runtime line")
         expected_neoforge_range = neoforge.get("versionRange")
-        actual_neoforge_range = props.get("neoforge_version_range", props.get("neoforge_loader_version"))
-        if expected_neoforge_range and actual_neoforge_range != expected_neoforge_range:
-            fail(f"{path}: neoforge_version_range/loader fallback disagrees with compatibility lock")
+        actual_neoforge_range = require(props, path, "neoforge_version_range")
+        if not expected_neoforge_range or actual_neoforge_range != expected_neoforge_range:
+            fail(f"{path}: neoforge_version_range disagrees with compatibility lock")
+        if not actual_neoforge_range.startswith("[21."):
+            fail(f"{path}: neoforge_version_range must describe the NeoForge runtime line, for example [21.5,)")
 
         guards = locked.get("compatibilityGuards") or {}
         for key in ("timeAccess", "gamerules", "dimensions", "serverTicks"):
@@ -143,6 +148,27 @@ def main() -> int:
         fail("gradle.properties fallback fabric_version must mirror buildProfiles/1.21.5.properties")
     if fallback.get("neoforge_version") != baseline["loaders"]["neoforge"].get("version"):
         fail("gradle.properties fallback neoforge_version must mirror buildProfiles/1.21.5.properties")
+    if fallback.get("neoforge_loader_version") != baseline["loaders"]["neoforge"].get("loaderRange"):
+        fail("gradle.properties fallback neoforge_loader_version must mirror buildProfiles/1.21.5.properties")
+    if fallback.get("neoforge_version_range") != baseline["loaders"]["neoforge"].get("versionRange"):
+        fail("gradle.properties fallback neoforge_version_range must mirror buildProfiles/1.21.5.properties")
+
+    fabric_mod_json = (ROOT / "fabric/src/main/resources/fabric.mod.json").read_text(encoding="utf-8")
+    if '"fabric-api": ">=${fabric_version}"' not in fabric_mod_json:
+        fail("fabric.mod.json must declare Fabric API as a minimum runtime dependency using >=${fabric_version}")
+
+    for gradle_file in (ROOT / "fabric/build.gradle", ROOT / "quilt/build.gradle"):
+        content = gradle_file.read_text(encoding="utf-8")
+        if "inputs.property 'fabric_version', project.fabric_version" not in content:
+            fail(f"{gradle_file}: processResources must track fabric_version")
+        if "fabric_version: project.fabric_version" not in content:
+            fail(f"{gradle_file}: processResources must expand fabric_version into fabric.mod.json")
+
+    neoforge_toml = (ROOT / "neoforge/src/main/resources/META-INF/neoforge.mods.toml").read_text(encoding="utf-8")
+    if 'loaderVersion="${neoforge_loader_version}"' not in neoforge_toml:
+        fail("neoforge.mods.toml must keep javafml loaderVersion separate from NeoForge dependency versionRange")
+    if 'versionRange="${neoforge_version_range}"' not in neoforge_toml:
+        fail("neoforge.mods.toml must use neoforge_version_range for the NeoForge runtime dependency")
 
     print("Build profile dependency validation passed.")
     return 0

@@ -55,10 +55,10 @@
         "neoforge": {
           "supported": true,
           "version": "21.0.160",
-          "loaderRange": "[21.0,)",
+          "loaderRange": "[1,)",
           "versionRange": "[21.0,)",
           "artifact": "net.neoforged:neoforge:21.0.160",
-          "notes": "NeoForge ModDev build with exact version pin."
+          "notes": "NeoForge ModDev build with exact NeoForge pin, javafml loader range and NeoForge dependency range split explicitly."
         }
       },
       "compatibilityGuards": {
@@ -96,10 +96,10 @@
         "neoforge": {
           "supported": true,
           "version": "21.1.172",
-          "loaderRange": "[21.1,)",
+          "loaderRange": "[1,)",
           "versionRange": "[21.1,)",
           "artifact": "net.neoforged:neoforge:21.1.172",
-          "notes": "NeoForge ModDev build with exact version pin."
+          "notes": "NeoForge ModDev build with exact NeoForge pin, javafml loader range and NeoForge dependency range split explicitly."
         }
       },
       "compatibilityGuards": {
@@ -137,10 +137,10 @@
         "neoforge": {
           "supported": true,
           "version": "21.2.0-beta",
-          "loaderRange": "[21.2,)",
+          "loaderRange": "[1,)",
           "versionRange": "[21.2,)",
           "artifact": "net.neoforged:neoforge:21.2.0-beta",
-          "notes": "NeoForge ModDev build with exact version pin."
+          "notes": "NeoForge ModDev build with exact NeoForge pin, javafml loader range and NeoForge dependency range split explicitly."
         }
       },
       "compatibilityGuards": {
@@ -178,10 +178,10 @@
         "neoforge": {
           "supported": true,
           "version": "21.3.87",
-          "loaderRange": "[21.3,)",
+          "loaderRange": "[1,)",
           "versionRange": "[21.3,)",
           "artifact": "net.neoforged:neoforge:21.3.87",
-          "notes": "NeoForge ModDev build with exact version pin."
+          "notes": "NeoForge ModDev build with exact NeoForge pin, javafml loader range and NeoForge dependency range split explicitly."
         }
       },
       "compatibilityGuards": {
@@ -219,10 +219,10 @@
         "neoforge": {
           "supported": true,
           "version": "21.4.147",
-          "loaderRange": "[21.4,)",
+          "loaderRange": "[1,)",
           "versionRange": "[21.4,)",
           "artifact": "net.neoforged:neoforge:21.4.147",
-          "notes": "NeoForge ModDev build with exact version pin."
+          "notes": "NeoForge ModDev build with exact NeoForge pin, javafml loader range and NeoForge dependency range split explicitly."
         }
       },
       "compatibilityGuards": {
@@ -260,10 +260,10 @@
         "neoforge": {
           "supported": true,
           "version": "21.5.95",
-          "loaderRange": "[21.5,)",
+          "loaderRange": "[1,)",
           "versionRange": "[21.5,)",
           "artifact": "net.neoforged:neoforge:21.5.95",
-          "notes": "NeoForge ModDev build with exact version pin."
+          "notes": "NeoForge ModDev build with exact NeoForge pin, javafml loader range and NeoForge dependency range split explicitly."
         }
       },
       "compatibilityGuards": {
@@ -301,10 +301,10 @@
         "neoforge": {
           "supported": true,
           "version": "21.6.16-beta",
-          "loaderRange": "[21.6,)",
+          "loaderRange": "[1,)",
           "versionRange": "[21.6,)",
           "artifact": "net.neoforged:neoforge:21.6.16-beta",
-          "notes": "NeoForge ModDev build with exact version pin."
+          "notes": "NeoForge ModDev build with exact NeoForge pin, javafml loader range and NeoForge dependency range split explicitly."
         }
       },
       "compatibilityGuards": {
@@ -342,10 +342,10 @@
         "neoforge": {
           "supported": true,
           "version": "21.7.20-beta",
-          "loaderRange": "[21.7,)",
+          "loaderRange": "[1,)",
           "versionRange": "[21.7,)",
           "artifact": "net.neoforged:neoforge:21.7.20-beta",
-          "notes": "NeoForge ModDev build with exact version pin."
+          "notes": "NeoForge ModDev build with exact NeoForge pin, javafml loader range and NeoForge dependency range split explicitly."
         }
       },
       "compatibilityGuards": {
@@ -383,10 +383,10 @@
         "neoforge": {
           "supported": true,
           "version": "21.8.39",
-          "loaderRange": "[21.8,)",
+          "loaderRange": "[1,)",
           "versionRange": "[21.8,)",
           "artifact": "net.neoforged:neoforge:21.8.39",
-          "notes": "NeoForge ModDev build with exact version pin."
+          "notes": "NeoForge ModDev build with exact NeoForge pin, javafml loader range and NeoForge dependency range split explicitly."
         }
       },
       "compatibilityGuards": {
@@ -424,10 +424,10 @@
         "neoforge": {
           "supported": true,
           "version": "21.9.9-beta",
-          "loaderRange": "[21.9,)",
+          "loaderRange": "[1,)",
           "versionRange": "[21.9,)",
           "artifact": "net.neoforged:neoforge:21.9.9-beta",
-          "notes": "NeoForge ModDev build with exact version pin."
+          "notes": "NeoForge ModDev build with exact NeoForge pin, javafml loader range and NeoForge dependency range split explicitly."
         }
       },
       "compatibilityGuards": {
@@ -465,10 +465,10 @@
         "neoforge": {
           "supported": true,
           "version": "21.10.48-beta",
-          "loaderRange": "[21.10,)",
+          "loaderRange": "[1,)",
           "versionRange": "[21.10,)",
           "artifact": "net.neoforged:neoforge:21.10.48-beta",
-          "notes": "NeoForge ModDev build with exact version pin."
+          "notes": "NeoForge ModDev build with exact NeoForge pin, javafml loader range and NeoForge dependency range split explicitly."
         }
       },
       "compatibilityGuards": {
@@ -506,10 +506,10 @@
         "neoforge": {
           "supported": true,
           "version": "21.11.0-beta",
-          "loaderRange": "[21.11,)",
+          "loaderRange": "[1,)",
           "versionRange": "[21.11,)",
           "artifact": "net.neoforged:neoforge:21.11.0-beta",
-          "notes": "NeoForge ModDev build with exact version pin."
+          "notes": "NeoForge ModDev build with exact NeoForge pin, javafml loader range and NeoForge dependency range split explicitly."
         }
       },
       "compatibilityGuards": {

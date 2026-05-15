@@ -224,10 +224,16 @@ forge_version=61.1.5
 forge_loader_version=[61,)
 
 neoforge_version=21.11.0-beta
-neoforge_loader_version=[21.11,)
+neoforge_loader_version=[1,)
+neoforge_version_range=[21.11,)
 ```
 
-Fabric API is pinned to an exact artifact per profile and still checked by Gradle so the version suffix must match the selected Minecraft version, for example `+1.21.11` for Minecraft `1.21.11`.
+Fabric API is pinned to an exact artifact per profile and is also declared as a minimum runtime dependency in `fabric.mod.json`, for example `>=0.141.3+1.21.11` for Minecraft `1.21.11`. The version suffix must match the selected Minecraft version.
+
+NeoForge keeps two ranges separate:
+
+- `neoforge_loader_version=[1,)` is the `javafml` language-loader range used by `loaderVersion`;
+- `neoforge_version_range=[21.x,)` is the actual NeoForge runtime dependency range used by `[[dependencies.realtime]]`.
 
 ## GitHub Actions release flow
 
@@ -322,9 +328,10 @@ bash scripts/verify-build-matrix.sh
 
 Important rules:
 
-- Fabric API is pinned per Minecraft profile instead of `0.+` to avoid non-reproducible releases.
+- Fabric API is pinned per Minecraft profile instead of `0.+` and exposed as a minimum runtime dependency instead of `*`.
 - Forge `1.21.2` is intentionally disabled because the active Forge downloads list does not provide a normal Forge artifact for that Minecraft version.
 - Forge `1.21.10` is pinned to `60.1.0` instead of latest `60.1.9`, because `60.1.9` can fail in ForgeGradle Mavenizer on GitHub-hosted runners.
+- NeoForge uses `loaderVersion=[1,)` for `javafml` and `neoforge_version_range=[21.x,)` for the NeoForge dependency itself.
 - Every active profile uses Java 21.
 
 ## Compatibility lock and supported matrix
