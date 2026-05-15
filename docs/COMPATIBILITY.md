@@ -1,64 +1,67 @@
-# Compatibility policy
+# Compatibility — Minecraft 26.1.x
 
-## Supported policy
+This branch supports only Minecraft `26.1.x`:
 
-This branch supports only Minecraft `1.21.x` profiles:
-
-```txt
-1.21, 1.21.1, 1.21.2, 1.21.3, 1.21.4, 1.21.5,
-1.21.6, 1.21.7, 1.21.8, 1.21.9, 1.21.10, 1.21.11
+```text
+26.1
+26.1.1
+26.1.2
 ```
 
-The `mc-1.21.x` branch must not contain active `26.x` build profiles, dependency lock entries, or CI matrix entries.
+Branch target: `mc-26.1.x`.
 
-## Updating dependencies
+## Java
 
-When changing a loader dependency:
+All active profiles use Java `25`.
 
-1. Update `buildProfiles/<minecraft-version>.properties`.
-2. Update `config/build-compatibility.lock.json`.
-3. Run the local validation commands:
+## Fabric / Quilt-compatible
 
-```bash
-python3 scripts/validate-build-profiles.py
-python3 scripts/validate-dependency-artifacts.py
-bash scripts/verify-build-matrix.sh
+Fabric and Quilt-compatible artifacts use Fabric Loom without remap mappings:
+
+```gradle
+apply plugin: 'net.fabricmc.fabric-loom'
+implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 ```
 
-Use the online Maven probe only when you need to verify remote artifacts:
+Each profile pins an exact Fabric API artifact. The runtime metadata declares Fabric API as `>=${fabric_version}`.
 
-```bash
-python3 scripts/validate-dependency-artifacts.py --online
+## Forge
+
+Forge profiles are enabled for all active versions:
+
+```text
+26.1   -> Forge 62.0.9
+26.1.1 -> Forge 63.0.2
+26.1.2 -> Forge 64.0.8
 ```
 
-## Fabric and Quilt builds
+Forge builds use ForgeGradle 7 and `minecraft.dependency(...)`.
 
-Fabric and Quilt use `net.fabricmc.fabric-loom-remap` with `loom.officialMojangMappings()` for every active `1.21.x` profile.
+## NeoForge
 
-Rules:
+NeoForge profiles are enabled for all active versions. `loaderVersion` stays hard-coded to the JavaFML language loader range:
 
-- keep Fabric Loader and Fabric API pinned exactly;
-- keep the Fabric API suffix matched to the selected Minecraft version;
-- expose Fabric API in `fabric.mod.json` as `>=${fabric_version}`, never `*`;
-- use `modImplementation` for Fabric Loader and Fabric API;
-- do not reintroduce a `26.x` Loom branch in this repository branch.
+```toml
+loaderVersion="[1,)"
+```
 
-## Runtime compatibility guards
+NeoForge runtime compatibility is handled by `neoforge_version_range`:
 
-The mod avoids direct APIs that moved or changed across the `1.21.x` profile range:
+```text
+26.1   -> [26.1,)
+26.1.1 -> [26.1.1,)
+26.1.2 -> [26.1.2,)
+```
 
-- daylight gamerules are resolved reflectively instead of importing `GameRules` directly;
-- day-time reads and writes go through `RealtimeWorldTime`;
-- dimension IDs are normalized through reflection;
-- Fabric/Quilt entrypoints use `ServerTickEvents.END_SERVER_TICK` and let the common controller perform first-tick initialization.
+## Guardrails
 
-## Forge and NeoForge notes
+`bash scripts/verify-build-matrix.sh` checks:
 
-Forge `1.21.2` is disabled because no matching normal Forge artifact is available for that profile. Forge `1.21.10` is pinned to `60.1.0` because newer artifacts can fail during ForgeGradle Mavenizer resolution on GitHub-hosted runners.
-
-NeoForge versions are pinned exactly. Do not use wildcard versions such as `21.x.+` with ModDev/NeoForm because they can resolve as literal userdev artifact coordinates in this setup.
-
-NeoForge metadata must keep the language loader and runtime dependency ranges separate:
-
-- `neoforge_loader_version=[1,)` documents the JavaFML language-loader floor, but `neoforge.mods.toml` hard-codes `loaderVersion="[1,)"`;
-- `neoforge_version_range=[21.x,)` maps to the required `neoforge` dependency range.
+- profile and compatibility lock consistency;
+- Fabric/Quilt official-namespace build shape;
+- ForgeGradle 7 DSL usage;
+- NeoForge JavaFML metadata split;
+- loader metadata boundaries;
+- CI matrix generation;
+- common runtime reflective access rules.

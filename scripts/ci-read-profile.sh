@@ -29,6 +29,7 @@ case "${LOADER}" in
     MODULE_DIR="fabric"
     ENABLE_KEY="enable_fabric"
     CURSEFORGE_LOADER="fabric"
+    CURSEFORGE_DEPENDENCIES="306612(required)"
     ;;
   quilt)
     LOADER_TITLE="Quilt"
@@ -36,6 +37,7 @@ case "${LOADER}" in
     MODULE_DIR="quilt"
     ENABLE_KEY="enable_quilt"
     CURSEFORGE_LOADER="quilt"
+    CURSEFORGE_DEPENDENCIES="306612(required)"
     ;;
   forge)
     LOADER_TITLE="Forge"
@@ -43,6 +45,7 @@ case "${LOADER}" in
     MODULE_DIR="forge"
     ENABLE_KEY="enable_forge"
     CURSEFORGE_LOADER="forge"
+    CURSEFORGE_DEPENDENCIES=""
     ;;
   neoforge)
     LOADER_TITLE="NeoForge"
@@ -50,6 +53,7 @@ case "${LOADER}" in
     MODULE_DIR="neoforge"
     ENABLE_KEY="enable_neoforge"
     CURSEFORGE_LOADER="neoforge"
+    CURSEFORGE_DEPENDENCIES=""
     ;;
   *)
     fail "Unsupported loader '${LOADER}'. Expected fabric, quilt, forge or neoforge."
@@ -98,6 +102,7 @@ write_output curseforge_game_versions "${MC_VERSION}"
 write_output enabled "${ENABLED}"
 write_output enable_key "${ENABLE_KEY}"
 write_output curseforge_loader "${CURSEFORGE_LOADER}"
+write_output curseforge_dependencies "${CURSEFORGE_DEPENDENCIES}"
 write_output jar_name "${JAR_NAME}"
 write_output jar_path "${JAR_PATH}"
 write_output artifact_name "${ARTIFACT_NAME}"

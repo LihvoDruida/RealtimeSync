@@ -2,15 +2,17 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+import sys
 
-matrix = json.loads(Path('/tmp/realtime-sync-matrix.json').read_text(encoding='utf-8'))
+matrix = json.loads(sys.stdin.read())
 items = matrix.get('include', [])
 if not items:
     raise SystemExit('ERROR: generated CI matrix is empty')
-if {'mc_profile': '1.21.2', 'loader': 'forge'} in items:
-    raise SystemExit('ERROR: generated CI matrix must not include unsupported 1.21.2 Forge')
 for item in items:
-    if set(item) != {'mc_profile', 'loader'}:
-        raise SystemExit(f'ERROR: invalid matrix item: {item}')
-print(f'Generated CI matrix contains {len(items)} supported build entries.')
+    profile = item.get('mc_profile', '')
+    loader = item.get('loader', '')
+    if not profile.startswith('26.1'):
+        raise SystemExit(f'ERROR: mc-26.1.x matrix contains non-26.1.x profile: {profile}')
+    if loader not in {'fabric', 'quilt', 'forge', 'neoforge'}:
+        raise SystemExit(f'ERROR: unsupported loader in matrix: {loader}')
+print(f'CI matrix guard passed for {len(items)} 26.1.x entries.')

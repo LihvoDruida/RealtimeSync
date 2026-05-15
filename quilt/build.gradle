@@ -2,13 +2,13 @@ plugins {
     id 'maven-publish'
 }
 
-if (!rootProject.ext.isLoaderEnabled('quilt')) {
+if (!rootProject.ext.isLoaderEnabled('fabric')) {
     logger.lifecycle("Skipping :quilt: project is disabled for Minecraft ${rootProject.ext.minecraft_version} by buildProfiles/${rootProject.ext.mcProfile}.properties")
     tasks.configureEach { enabled = false }
     return
 }
 
-apply plugin: 'net.fabricmc.fabric-loom-remap'
+apply plugin: 'net.fabricmc.fabric-loom'
 
 base {
     archivesName = "${project.archives_base_name}-quilt-${project.minecraft_version}"
@@ -35,10 +35,10 @@ configurations.configureEach {
 dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
 
-    // Minecraft 1.21.x uses Loom Remap with Mojang official mappings.
-    mappings loom.officialMojangMappings()
-    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+    // Minecraft 26.1.x is distributed in the official namespace. Do not add
+    // remap-only dependency paths are intentionally not used here.
+    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 }
 
 processResources {

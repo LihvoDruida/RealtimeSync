@@ -47,8 +47,8 @@ def main() -> int:
         fail("Compatibility lock must define loaders in order: fabric, quilt, forge, neoforge")
 
     expected_profiles = lock.get("profileOrder")
-    if not expected_profiles:
-        fail("Compatibility lock profileOrder is empty")
+    if expected_profiles != ["26.1", "26.1.1", "26.1.2"]:
+        fail("mc-26.1.x branch must contain exactly 26.1, 26.1.1 and 26.1.2 profiles")
 
     profile_files = sorted(p.name for p in PROFILES_DIR.glob("*.properties") if not p.name.endswith(".example"))
     expected_files = sorted(f"{profile}.properties" for profile in expected_profiles)
@@ -56,6 +56,9 @@ def main() -> int:
         fail(f"buildProfiles set mismatch. expected={expected_files}, actual={profile_files}")
 
     workflow = (ROOT / ".github/workflows/package.yml").read_text(encoding="utf-8")
+    old_branch = "mc-" + "1" + ".21.x"
+    if "mc-26.1.x" not in workflow or old_branch in workflow:
+        fail("Workflow must target mc-26.1.x and must not target the old stable branch")
     if "generate-ci-matrix.py --github-output" not in workflow:
         fail("Workflow must generate matrix from config/build-compatibility.lock.json")
 
@@ -81,17 +84,19 @@ def main() -> int:
             fail(f"{path}: wrong mods.toml Minecraft range")
 
         expected_java = str(locked.get("javaVersion"))
+        if expected_java != "25":
+            fail(f"Compatibility lock {profile}: 26.1.x profiles must use Java 25")
         if require(props, path, "java_version") != expected_java:
             fail(f"{path}: java_version must be {expected_java}")
         if require(props, path, "curseforge_java_versions") != f"Java {expected_java}":
             fail(f"{path}: curseforge_java_versions must be Java {expected_java}")
 
-        if profile != "1.21" and not profile.startswith("1.21."):
-            fail(f"Compatibility lock {profile}: mc-1.21.x branch may only contain Minecraft 1.21.x profiles")
+        if not profile.startswith("26.1"):
+            fail(f"Compatibility lock {profile}: mc-26.1.x branch may only contain Minecraft 26.1.x profiles")
 
         expected_mapping_mode = locked.get("fabricMappings")
-        if expected_mapping_mode != "official-mojang-with-loom-remap":
-            fail(f"Compatibility lock {profile}: 1.21.x Fabric/Quilt builds must use official Mojang mappings through Loom Remap")
+        if expected_mapping_mode != "official-namespace-no-remap":
+            fail(f"Compatibility lock {profile}: 26.1.x Fabric/Quilt builds must use the official namespace without Loom remap mappings")
 
         if require(props, path, "fabric_loader_version") != locked.get("fabricLoader"):
             fail(f"{path}: fabric_loader_version disagrees with compatibility lock")
@@ -117,8 +122,6 @@ def main() -> int:
             fail(f"{path}: forge_loader_version disagrees with compatibility lock")
         if props["enable_forge"] == "true" and props["forge_version"] == "unsupported":
             fail(f"{path}: supported Forge profile cannot use forge_version=unsupported")
-        if props["enable_forge"] == "false" and props["forge_version"] != "unsupported":
-            fail(f"{path}: disabled Forge profile should use forge_version=unsupported to avoid accidental resolution")
 
         neoforge = locked["loaders"]["neoforge"]
         if require(props, path, "neoforge_version") != neoforge.get("version"):
@@ -134,8 +137,8 @@ def main() -> int:
         actual_neoforge_range = require(props, path, "neoforge_version_range")
         if not expected_neoforge_range or actual_neoforge_range != expected_neoforge_range:
             fail(f"{path}: neoforge_version_range disagrees with compatibility lock")
-        if not actual_neoforge_range.startswith("[21."):
-            fail(f"{path}: neoforge_version_range must describe the NeoForge runtime line, for example [21.5,)")
+        if not actual_neoforge_range.startswith("[26.1"):
+            fail(f"{path}: neoforge_version_range must describe the NeoForge 26.1.x runtime line")
 
         guards = locked.get("compatibilityGuards") or {}
         for key in ("timeAccess", "gamerules", "dimensions", "serverTicks"):
@@ -143,15 +146,17 @@ def main() -> int:
                 fail(f"Compatibility lock {profile}: missing guard {key}")
 
     fallback = read_properties(ROOT / "gradle.properties")
-    baseline = lock["profiles"].get("1.21.5")
+    baseline = lock["profiles"].get("26.1.2")
+    if fallback.get("mcProfile") != "26.1.2":
+        fail("gradle.properties default mcProfile must be 26.1.2")
     if fallback.get("fabric_version") != baseline.get("fabricApi"):
-        fail("gradle.properties fallback fabric_version must mirror buildProfiles/1.21.5.properties")
+        fail("gradle.properties fallback fabric_version must mirror buildProfiles/26.1.2.properties")
     if fallback.get("neoforge_version") != baseline["loaders"]["neoforge"].get("version"):
-        fail("gradle.properties fallback neoforge_version must mirror buildProfiles/1.21.5.properties")
+        fail("gradle.properties fallback neoforge_version must mirror buildProfiles/26.1.2.properties")
     if fallback.get("neoforge_loader_version") != baseline["loaders"]["neoforge"].get("loaderRange"):
-        fail("gradle.properties fallback neoforge_loader_version must mirror buildProfiles/1.21.5.properties")
+        fail("gradle.properties fallback neoforge_loader_version must mirror buildProfiles/26.1.2.properties")
     if fallback.get("neoforge_version_range") != baseline["loaders"]["neoforge"].get("versionRange"):
-        fail("gradle.properties fallback neoforge_version_range must mirror buildProfiles/1.21.5.properties")
+        fail("gradle.properties fallback neoforge_version_range must mirror buildProfiles/26.1.2.properties")
 
     fabric_mod_json = (ROOT / "fabric/src/main/resources/fabric.mod.json").read_text(encoding="utf-8")
     if '"fabric-api": ">=${fabric_version}"' not in fabric_mod_json:
@@ -159,6 +164,13 @@ def main() -> int:
 
     for gradle_file in (ROOT / "fabric/build.gradle", ROOT / "quilt/build.gradle"):
         content = gradle_file.read_text(encoding="utf-8")
+        uncommented = "\n".join(line.split("//", 1)[0] for line in content.splitlines())
+        if "net.fabricmc.fabric-loom-remap" in uncommented:
+            fail(f"{gradle_file}: 26.1.x branch must not apply fabric-loom-remap")
+        if "mappings loom.officialMojangMappings()" in uncommented or "modImplementation" in uncommented:
+            fail(f"{gradle_file}: 26.1.x branch must not use mappings or modImplementation")
+        if "implementation \"net.fabricmc:fabric-loader" not in content or "implementation \"net.fabricmc.fabric-api:fabric-api" not in content:
+            fail(f"{gradle_file}: 26.1.x branch must use implementation dependencies for Fabric Loader and Fabric API")
         if "inputs.property 'fabric_version', project.fabric_version" not in content:
             fail(f"{gradle_file}: processResources must track fabric_version")
         if "fabric_version: project.fabric_version" not in content:

@@ -84,8 +84,9 @@ def validate_mods_toml(jar: zipfile.ZipFile, path: str, platform_mod_id: str, mi
     assert_contains(text, minecraft_version, path)
     if platform_mod_id == "neoforge":
         assert_contains(text, 'loaderVersion="[1,)"', path)
-        expected_minor = "0" if minecraft_version == "1.21" else minecraft_version.split(".")[2]
-        assert_contains(text, f'versionRange="[21.{expected_minor},)"', path)
+        if not minecraft_version.startswith("26.1"):
+            fail(f"Unsupported Minecraft version for this branch metadata validation: {minecraft_version}")
+        assert_contains(text, f'versionRange="[{minecraft_version},)"', path)
 
 
 def validate_common_entries(jar: zipfile.ZipFile, loader: str, jar_path: Path) -> None:

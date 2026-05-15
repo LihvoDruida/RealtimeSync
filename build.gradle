@@ -1,5 +1,5 @@
 plugins {
-    id 'net.fabricmc.fabric-loom-remap' version '1.15.5' apply false
+    id 'net.fabricmc.fabric-loom' version '1.17.0-alpha.8' apply false
     id 'net.minecraftforge.gradle' version '7.0.25' apply false
     id 'net.neoforged.moddev' version '2.0.141' apply false
 }
@@ -7,7 +7,7 @@ plugins {
 import java.util.Properties
 
 ext.loadMinecraftProfile = {
-    String requestedProfile = (findProperty('mcProfile') ?: System.getenv('MC_PROFILE') ?: findProperty('minecraft_version') ?: '1.21.5').toString()
+    String requestedProfile = (findProperty('mcProfile') ?: System.getenv('MC_PROFILE') ?: findProperty('minecraft_version') ?: '26.1.2').toString()
     File profileFile = rootProject.file("buildProfiles/${requestedProfile}.properties")
 
     Properties loaded = new Properties()
