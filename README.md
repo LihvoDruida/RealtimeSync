@@ -69,8 +69,9 @@ For Windows PowerShell:
 ```properties
 minecraft_version=26.1.2
 minecraft_compat_label=26.1.2
-minecraft_version_range_fabric=>=26.1.2 <26.1.3
-minecraft_version_range_mods_toml=[26.1.2,26.1.3)
+minecraft_runtime_min_version=26.1.2
+minecraft_runtime_max_version=26.1.3
+minecraft_accept_beta=true
 java_version=25
 curseforge_java_versions=Java 25
 
@@ -83,8 +84,28 @@ forge_loader_version=[64,)
 
 neoforge_version=26.1.2.48-beta
 neoforge_loader_version=[1,)
-neoforge_version_range=[26.1.2,)
+neoforge_runtime_min_version=26.1.2
+neoforge_accept_beta=true
 ```
+
+## Shared beta-compatible Minecraft ranges
+
+Minecraft dependency metadata is derived for every loader from:
+
+```properties
+minecraft_runtime_min_version=26.1.2
+minecraft_runtime_max_version=26.1.3
+minecraft_accept_beta=true
+```
+
+For `26.1.2`, Gradle generates:
+
+```text
+Fabric / Quilt: >=26.1.2-0-beta <26.1.3
+Forge / NeoForge: [26.1.2-0-beta,26.1.3)
+```
+
+So the same jar can load on `26.1.2-0-beta` style runtimes and later stable `26.1.2` builds, but it still stops before `26.1.3`.
 
 ## Fabric and Quilt notes
 
@@ -115,13 +136,14 @@ modLoader="javafml"
 loaderVersion="[1,)"
 ```
 
-The NeoForge runtime dependency is stored separately:
+The NeoForge runtime dependency is still written into `neoforge.mods.toml` as `versionRange="${neoforge_version_range}"`, but Gradle now derives that value from the profile:
 
-```toml
-[[dependencies.realtime]]
-modId="neoforge"
-versionRange="${neoforge_version_range}"
+```properties
+neoforge_runtime_min_version=26.1.2
+neoforge_accept_beta=true
 ```
+
+For `26.1.2`, this produces the NeoForge runtime dependency `versionRange="[26.1.2-0-beta,)"`, so both `26.1.2-0-beta` and later stable `26.1.2` NeoForge runtimes are accepted.
 
 Do not put `26.1.x` into `loaderVersion`. That recreates the `needs language provider javafml@...` loading error.
 

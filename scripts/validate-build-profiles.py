@@ -34,6 +34,25 @@ def require(props: dict[str, str], path: Path, key: str) -> str:
     return props[key]
 
 
+def beta_lower_bound(runtime_min_version: str, accept_beta: bool) -> str:
+    lower_bound = runtime_min_version
+    if accept_beta and "-" not in lower_bound:
+        lower_bound = f"{lower_bound}-0-beta"
+    return lower_bound
+
+
+def derive_closed_open_range(runtime_min_version: str, runtime_max_version: str, accept_beta: bool) -> str:
+    return f"[{beta_lower_bound(runtime_min_version, accept_beta)},{runtime_max_version})"
+
+
+def derive_fabric_range(runtime_min_version: str, runtime_max_version: str, accept_beta: bool) -> str:
+    return f">={beta_lower_bound(runtime_min_version, accept_beta)} <{runtime_max_version}"
+
+
+def derive_open_ended_range(runtime_min_version: str, accept_beta: bool) -> str:
+    return f"[{beta_lower_bound(runtime_min_version, accept_beta)},)"
+
+
 def main() -> int:
     if not LOCK_PATH.is_file():
         fail(f"Missing compatibility lock: {LOCK_PATH}")
@@ -86,10 +105,29 @@ def main() -> int:
             fail(f"Compatibility lock {profile}: missing nextMinecraftVersion")
         if require(props, path, "minecraft_compat_label") != profile:
             fail(f"{path}: minecraft_compat_label must equal {profile}")
-        if require(props, path, "minecraft_version_range_fabric") != f">={profile} <{next_profile}":
-            fail(f"{path}: wrong Fabric Minecraft range")
-        if require(props, path, "minecraft_version_range_mods_toml") != f"[{profile},{next_profile})":
-            fail(f"{path}: wrong mods.toml Minecraft range")
+
+        runtime = locked.get("minecraftRuntime") or {}
+        minecraft_runtime_min = require(props, path, "minecraft_runtime_min_version")
+        minecraft_runtime_max = require(props, path, "minecraft_runtime_max_version")
+        minecraft_accept_beta_value = require(props, path, "minecraft_accept_beta")
+        if minecraft_accept_beta_value not in {"true", "false"}:
+            fail(f"{path}: minecraft_accept_beta must be true or false")
+        minecraft_accept_beta = minecraft_accept_beta_value == "true"
+        if minecraft_runtime_min != runtime.get("minVersion") or minecraft_runtime_min != profile:
+            fail(f"{path}: minecraft_runtime_min_version must equal the profile and compatibility lock")
+        if minecraft_runtime_max != runtime.get("maxVersion") or minecraft_runtime_max != next_profile:
+            fail(f"{path}: minecraft_runtime_max_version must equal nextMinecraftVersion")
+        if minecraft_accept_beta != bool(runtime.get("acceptBeta")):
+            fail(f"{path}: minecraft_accept_beta disagrees with compatibility lock")
+
+        derived_fabric_range = derive_fabric_range(minecraft_runtime_min, minecraft_runtime_max, minecraft_accept_beta)
+        derived_mods_range = derive_closed_open_range(minecraft_runtime_min, minecraft_runtime_max, minecraft_accept_beta)
+        if props.get("minecraft_version_range_fabric") or props.get("minecraft_version_range_mods_toml"):
+            fail(f"{path}: Minecraft dependency ranges must be derived from minecraft_runtime_* and minecraft_accept_beta, not hard-coded")
+        if derived_fabric_range != runtime.get("fabricRange"):
+            fail(f"{path}: derived Fabric/Quilt Minecraft range {derived_fabric_range} disagrees with compatibility lock")
+        if derived_mods_range != runtime.get("modsTomlRange"):
+            fail(f"{path}: derived Forge/NeoForge Minecraft range {derived_mods_range} disagrees with compatibility lock")
 
         expected_java = str(locked.get("javaVersion"))
         if expected_java != "25":
@@ -123,6 +161,13 @@ def main() -> int:
             if (value == "true") != supported:
                 fail(f"{path}: enable_{loader}={value} disagrees with compatibility lock supported={supported}")
 
+        for loader in ("fabric", "quilt"):
+            if locked["loaders"][loader].get("minecraftRange") != derived_fabric_range:
+                fail(f"Compatibility lock {profile} {loader}: minecraftRange must equal derived Fabric/Quilt range")
+        for loader in ("forge", "neoforge"):
+            if locked["loaders"][loader].get("minecraftRange") != derived_mods_range:
+                fail(f"Compatibility lock {profile} {loader}: minecraftRange must equal derived Forge/NeoForge range")
+
         forge = locked["loaders"]["forge"]
         if require(props, path, "forge_version") != forge.get("version"):
             fail(f"{path}: forge_version disagrees with compatibility lock")
@@ -142,11 +187,19 @@ def main() -> int:
         if neoforge_loader_range != "[1,)":
             fail(f"{path}: NeoForge modLoader=javafml loaderVersion must describe the javafml language loader range [1,), not the NeoForge runtime line")
         expected_neoforge_range = neoforge.get("versionRange")
-        actual_neoforge_range = require(props, path, "neoforge_version_range")
+        runtime_min_version = require(props, path, "neoforge_runtime_min_version")
+        if runtime_min_version != neoforge.get("runtimeMinVersion"):
+            fail(f"{path}: neoforge_runtime_min_version disagrees with compatibility lock")
+        accept_beta_value = require(props, path, "neoforge_accept_beta")
+        if accept_beta_value not in {"true", "false"}:
+            fail(f"{path}: neoforge_accept_beta must be true or false")
+        actual_neoforge_range = derive_open_ended_range(runtime_min_version, accept_beta_value == "true")
+        if props.get("neoforge_version_range"):
+            fail(f"{path}: neoforge_version_range must be derived from neoforge_runtime_min_version and neoforge_accept_beta, not hard-coded in the profile")
         if not expected_neoforge_range or actual_neoforge_range != expected_neoforge_range:
-            fail(f"{path}: neoforge_version_range disagrees with compatibility lock")
+            fail(f"{path}: derived NeoForge runtime range {actual_neoforge_range} disagrees with compatibility lock")
         if not actual_neoforge_range.startswith("[26.1"):
-            fail(f"{path}: neoforge_version_range must describe the NeoForge 26.1.x runtime line")
+            fail(f"{path}: derived NeoForge runtime range must describe the NeoForge 26.1.x runtime line")
 
         guards = locked.get("compatibilityGuards") or {}
         for key in ("timeAccess", "gamerules", "dimensions", "serverTicks"):
@@ -155,18 +208,43 @@ def main() -> int:
 
     fallback = read_properties(ROOT / "gradle.properties")
     baseline = lock["profiles"].get("26.1.2")
+    baseline_runtime = baseline.get("minecraftRuntime") or {}
     if fallback.get("mcProfile") != "26.1.2":
         fail("gradle.properties default mcProfile must be 26.1.2")
+    if fallback.get("minecraft_runtime_min_version") != baseline_runtime.get("minVersion"):
+        fail("gradle.properties fallback minecraft_runtime_min_version must mirror buildProfiles/26.1.2.properties")
+    if fallback.get("minecraft_runtime_max_version") != baseline_runtime.get("maxVersion"):
+        fail("gradle.properties fallback minecraft_runtime_max_version must mirror buildProfiles/26.1.2.properties")
+    if fallback.get("minecraft_accept_beta") != "true":
+        fail("gradle.properties fallback minecraft_accept_beta must be true for the 26.1.x beta runtime line")
+    if fallback.get("minecraft_version_range_fabric") or fallback.get("minecraft_version_range_mods_toml"):
+        fail("gradle.properties fallback must derive Minecraft dependency ranges instead of hard-coding them")
     if fallback.get("fabric_version") != baseline.get("fabricApi"):
         fail("gradle.properties fallback fabric_version must mirror buildProfiles/26.1.2.properties")
     if fallback.get("neoforge_version") != baseline["loaders"]["neoforge"].get("version"):
         fail("gradle.properties fallback neoforge_version must mirror buildProfiles/26.1.2.properties")
     if fallback.get("neoforge_loader_version") != baseline["loaders"]["neoforge"].get("loaderRange"):
         fail("gradle.properties fallback neoforge_loader_version must mirror buildProfiles/26.1.2.properties")
-    if fallback.get("neoforge_version_range") != baseline["loaders"]["neoforge"].get("versionRange"):
-        fail("gradle.properties fallback neoforge_version_range must mirror buildProfiles/26.1.2.properties")
+    if fallback.get("neoforge_runtime_min_version") != baseline["loaders"]["neoforge"].get("runtimeMinVersion"):
+        fail("gradle.properties fallback neoforge_runtime_min_version must mirror buildProfiles/26.1.2.properties")
+    if fallback.get("neoforge_accept_beta") != "true":
+        fail("gradle.properties fallback neoforge_accept_beta must be true for the 26.1.x beta runtime line")
+    if fallback.get("neoforge_version_range"):
+        fail("gradle.properties fallback must derive neoforge_version_range instead of hard-coding it")
+
+    root_build = (ROOT / "build.gradle").read_text(encoding="utf-8")
+    for needle in (
+        "betaCompatibleLowerBound",
+        "resolveMinecraftVersionRangeFabric()",
+        "resolveMinecraftVersionRangeModsToml()",
+        "resolveNeoForgeVersionRange()",
+    ):
+        if needle not in root_build:
+            fail(f"build.gradle must define/use {needle} for derived beta-compatible ranges")
 
     fabric_mod_json = (ROOT / "fabric/src/main/resources/fabric.mod.json").read_text(encoding="utf-8")
+    if '"minecraft": "${minecraft_version_range_fabric}"' not in fabric_mod_json:
+        fail("fabric.mod.json must expand the derived Minecraft range for Fabric/Quilt")
     if '"fabric-api": ">=${fabric_version}"' not in fabric_mod_json:
         fail("fabric.mod.json must declare Fabric API as a minimum runtime dependency using >=${fabric_version}")
 
@@ -179,10 +257,17 @@ def main() -> int:
             fail(f"{gradle_file}: 26.1.x branch must not use mappings or modImplementation")
         if "implementation \"net.fabricmc:fabric-loader" not in content or "implementation \"net.fabricmc.fabric-api:fabric-api" not in content:
             fail(f"{gradle_file}: 26.1.x branch must use implementation dependencies for Fabric Loader and Fabric API")
-        if "inputs.property 'fabric_version', project.fabric_version" not in content:
-            fail(f"{gradle_file}: processResources must track fabric_version")
+        if "resolveMinecraftVersionRangeFabric()" not in content:
+            fail(f"{gradle_file}: processResources must derive the Fabric/Quilt Minecraft range")
         if "fabric_version: project.fabric_version" not in content:
             fail(f"{gradle_file}: processResources must expand fabric_version into fabric.mod.json")
+    quilt_gradle = (ROOT / "quilt/build.gradle").read_text(encoding="utf-8")
+    if "isLoaderEnabled('quilt')" not in quilt_gradle:
+        fail("quilt/build.gradle must respect enable_quilt instead of enable_fabric")
+
+    forge_gradle = (ROOT / "forge/build.gradle").read_text(encoding="utf-8")
+    if "resolveMinecraftVersionRangeModsToml()" not in forge_gradle:
+        fail("forge/build.gradle must derive the Forge Minecraft dependency range")
 
     neoforge_toml = (ROOT / "neoforge/src/main/resources/META-INF/neoforge.mods.toml").read_text(encoding="utf-8")
     if 'loaderVersion="[1,)"' not in neoforge_toml:
@@ -191,8 +276,14 @@ def main() -> int:
         fail("neoforge.mods.toml must not expand loaderVersion from Gradle properties")
     if 'versionRange="${neoforge_version_range}"' not in neoforge_toml:
         fail("neoforge.mods.toml must use neoforge_version_range for the NeoForge runtime dependency")
+    if 'versionRange="${minecraft_version_range}"' not in neoforge_toml:
+        fail("neoforge.mods.toml must use the derived Minecraft range for the Minecraft dependency")
 
     neoforge_gradle = (ROOT / "neoforge/build.gradle").read_text(encoding="utf-8")
+    if "resolveNeoForgeVersionRange()" not in neoforge_gradle:
+        fail("neoforge/build.gradle must resolve the NeoForge runtime range through resolveNeoForgeVersionRange()")
+    if "resolveMinecraftVersionRangeModsToml()" not in neoforge_gradle:
+        fail("neoforge/build.gradle must derive the NeoForge Minecraft dependency range")
     if "neoforgeDependencyVersionRange" in neoforge_gradle or ": project.neoforge_loader_version" in neoforge_gradle:
         fail("neoforge/build.gradle must not fall back from neoforge_version_range to neoforge_loader_version")
 

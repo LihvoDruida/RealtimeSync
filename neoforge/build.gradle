@@ -37,18 +37,20 @@ neoForge {
 }
 
 processResources {
-    if (!project.hasProperty('neoforge_version_range') || project.neoforge_version_range.toString().trim().isEmpty()) {
-        throw new GradleException("Missing required neoforge_version_range for Minecraft ${project.minecraft_version}; do not reuse javafml loaderVersion for the NeoForge runtime dependency.")
+    String resolvedNeoForgeVersionRange = rootProject.ext.resolveNeoForgeVersionRange()
+    String resolvedMinecraftVersionRangeModsToml = rootProject.ext.resolveMinecraftVersionRangeModsToml()
+    if (resolvedNeoForgeVersionRange.trim().isEmpty()) {
+        throw new GradleException("Missing required NeoForge runtime version range for Minecraft ${project.minecraft_version}; set neoforge_runtime_min_version or neoforge_version_range, and do not reuse javafml loaderVersion for the NeoForge runtime dependency.")
     }
 
     inputs.property 'version', project.version
-    inputs.property 'neoforge_version_range', project.neoforge_version_range
-    inputs.property 'minecraft_version_range_mods_toml', project.minecraft_version_range_mods_toml
+    inputs.property 'neoforge_version_range', resolvedNeoForgeVersionRange
+    inputs.property 'minecraft_version_range_mods_toml', resolvedMinecraftVersionRangeModsToml
     filesMatching('META-INF/neoforge.mods.toml') {
         expand(
                 version: project.version,
-                neoforge_version_range: project.neoforge_version_range,
-                minecraft_version_range: project.minecraft_version_range_mods_toml
+                neoforge_version_range: resolvedNeoForgeVersionRange,
+                minecraft_version_range: resolvedMinecraftVersionRangeModsToml
         )
     }
 }

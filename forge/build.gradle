@@ -53,14 +53,16 @@ dependencies {
 }
 
 processResources {
+    String resolvedMinecraftVersionRangeModsToml = rootProject.ext.resolveMinecraftVersionRangeModsToml()
+
     inputs.property 'version', project.version
     inputs.property 'forge_loader_version', project.forge_loader_version
-    inputs.property 'minecraft_version_range_mods_toml', project.minecraft_version_range_mods_toml
+    inputs.property 'minecraft_version_range_mods_toml', resolvedMinecraftVersionRangeModsToml
     filesMatching('META-INF/mods.toml') {
         expand(
                 version: project.version,
                 forge_loader_version: project.forge_loader_version,
-                minecraft_version_range: project.minecraft_version_range_mods_toml
+                minecraft_version_range: resolvedMinecraftVersionRangeModsToml
         )
     }
 }

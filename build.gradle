@@ -31,8 +31,67 @@ ext.boolProfileProperty = { String key, boolean fallback = true ->
     return rootProject.ext.get(key).toString().toBoolean()
 }
 
+ext.stringProfileProperty = { String key, String fallback = '' ->
+    if (!rootProject.ext.has(key)) {
+        return fallback
+    }
+    return rootProject.ext.get(key).toString().trim()
+}
+
+ext.betaCompatibleLowerBound = { String minimumVersion, boolean acceptBeta, String displayName ->
+    String value = minimumVersion == null ? '' : minimumVersion.toString().trim()
+    if (value.isEmpty()) {
+        throw new GradleException("Missing ${displayName} minimum version in the selected build profile.")
+    }
+    return acceptBeta && !value.contains('-') ? "${value}-0-beta" : value
+}
+
 ext.isLoaderEnabled = { String loader ->
     return rootProject.ext.boolProfileProperty("enable_${loader}".toString(), true)
+}
+
+ext.resolveMinecraftVersionRangeParts = {
+    String minimumVersion = rootProject.ext.stringProfileProperty('minecraft_runtime_min_version', rootProject.ext.stringProfileProperty('minecraft_version'))
+    String maximumVersion = rootProject.ext.stringProfileProperty('minecraft_runtime_max_version')
+    if (maximumVersion.isEmpty()) {
+        throw new GradleException('Missing Minecraft runtime maximum version. Set minecraft_runtime_max_version in the build profile.')
+    }
+
+    boolean acceptBeta = rootProject.ext.boolProfileProperty('minecraft_accept_beta', false)
+    String lowerBound = rootProject.ext.betaCompatibleLowerBound(minimumVersion, acceptBeta, 'Minecraft runtime')
+    return [lowerBound, maximumVersion]
+}
+
+ext.resolveMinecraftVersionRangeFabric = {
+    String explicitRange = rootProject.ext.stringProfileProperty('minecraft_version_range_fabric')
+    if (!explicitRange.isEmpty()) {
+        return explicitRange
+    }
+
+    List<String> bounds = rootProject.ext.resolveMinecraftVersionRangeParts()
+    return ">=${bounds[0]} <${bounds[1]}"
+}
+
+ext.resolveMinecraftVersionRangeModsToml = {
+    String explicitRange = rootProject.ext.stringProfileProperty('minecraft_version_range_mods_toml')
+    if (!explicitRange.isEmpty()) {
+        return explicitRange
+    }
+
+    List<String> bounds = rootProject.ext.resolveMinecraftVersionRangeParts()
+    return "[${bounds[0]},${bounds[1]})"
+}
+
+ext.resolveNeoForgeVersionRange = {
+    String explicitRange = rootProject.ext.stringProfileProperty('neoforge_version_range')
+    if (!explicitRange.isEmpty()) {
+        return explicitRange
+    }
+
+    String minimumVersion = rootProject.ext.stringProfileProperty('neoforge_runtime_min_version', rootProject.ext.stringProfileProperty('minecraft_version'))
+    boolean acceptBeta = rootProject.ext.boolProfileProperty('neoforge_accept_beta', true)
+    String lowerBound = rootProject.ext.betaCompatibleLowerBound(minimumVersion, acceptBeta, 'NeoForge runtime')
+    return "[${lowerBound},)"
 }
 
 ext.loaderTaskOrSkip = { String taskName, String loaderName, String targetPath ->
@@ -64,6 +123,9 @@ allprojects {
     minecraftProfileProperties.each { key, value ->
         extensions.extraProperties.set(key.toString(), value.toString())
     }
+
+    extensions.extraProperties.set('minecraft_version_range_fabric', rootProject.ext.resolveMinecraftVersionRangeFabric())
+    extensions.extraProperties.set('minecraft_version_range_mods_toml', rootProject.ext.resolveMinecraftVersionRangeModsToml())
 
     group = project.maven_group
     version = project.mod_version
@@ -104,13 +166,19 @@ tasks.register('printBuildProfile') {
         println "mcProfile=${rootProject.ext.mcProfile}"
         println "minecraft_version=${rootProject.ext.minecraft_version}"
         println "minecraft_compat_label=${rootProject.ext.minecraft_compat_label}"
-        println "minecraft_version_range_fabric=${rootProject.ext.minecraft_version_range_fabric}"
-        println "minecraft_version_range_mods_toml=${rootProject.ext.minecraft_version_range_mods_toml}"
+        println "minecraft_runtime_min_version=${rootProject.ext.minecraft_runtime_min_version}"
+        println "minecraft_runtime_max_version=${rootProject.ext.minecraft_runtime_max_version}"
+        println "minecraft_accept_beta=${rootProject.ext.minecraft_accept_beta}"
+        println "minecraft_version_range_fabric=${rootProject.ext.resolveMinecraftVersionRangeFabric()}"
+        println "minecraft_version_range_mods_toml=${rootProject.ext.resolveMinecraftVersionRangeModsToml()}"
         println "java_version=${rootProject.ext.java_version}"
         println "fabric_loader_version=${rootProject.ext.loader_version}"
         println "fabric_version=${rootProject.ext.fabric_version}"
         println "forge_version=${rootProject.ext.forge_version}"
         println "neoforge_version=${rootProject.ext.neoforge_version}"
+        println "neoforge_runtime_min_version=${rootProject.ext.neoforge_runtime_min_version}"
+        println "neoforge_accept_beta=${rootProject.ext.neoforge_accept_beta}"
+        println "neoforge_version_range=${rootProject.ext.resolveNeoForgeVersionRange()}"
         println "enable_fabric=${rootProject.ext.isLoaderEnabled('fabric')}"
         println "enable_quilt=${rootProject.ext.isLoaderEnabled('quilt')}"
         println "enable_forge=${rootProject.ext.isLoaderEnabled('forge')}"

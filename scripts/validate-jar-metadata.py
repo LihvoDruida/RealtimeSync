@@ -36,6 +36,32 @@ def assert_contains(text: str, expected: str, path: str) -> None:
         fail(f"Expected {expected!r} in {path}")
 
 
+def next_minecraft_version(version: str) -> str:
+    parts = version.split(".")
+    if len(parts) == 2:
+        return f"{version}.1"
+    if len(parts) >= 3 and parts[-1].isdigit():
+        parts[-1] = str(int(parts[-1]) + 1)
+        return ".".join(parts)
+    fail(f"Cannot derive next Minecraft profile boundary for {version!r}")
+
+
+def beta_lower_bound(version: str) -> str:
+    return version if "-" in version else f"{version}-0-beta"
+
+
+def expected_fabric_minecraft_range(minecraft_version: str) -> str:
+    return f">={beta_lower_bound(minecraft_version)} <{next_minecraft_version(minecraft_version)}"
+
+
+def expected_mods_toml_minecraft_range(minecraft_version: str) -> str:
+    return f"[{beta_lower_bound(minecraft_version)},{next_minecraft_version(minecraft_version)})"
+
+
+def expected_open_ended_runtime_range(minecraft_version: str) -> str:
+    return f"[{beta_lower_bound(minecraft_version)},)"
+
+
 def validate_fabric_like(jar: zipfile.ZipFile, loader: str, minecraft_version: str, mod_version: str) -> None:
     path = "fabric.mod.json"
     text = read_text(jar, path)
@@ -53,8 +79,9 @@ def validate_fabric_like(jar: zipfile.ZipFile, loader: str, minecraft_version: s
 
     depends = metadata.get("depends") or {}
     minecraft_range = str(depends.get("minecraft", ""))
-    if minecraft_version not in minecraft_range:
-        fail(f"{path} minecraft dependency {minecraft_range!r} does not mention {minecraft_version!r}")
+    expected_minecraft_range = expected_fabric_minecraft_range(minecraft_version)
+    if minecraft_range != expected_minecraft_range:
+        fail(f"{path} minecraft dependency {minecraft_range!r} does not match derived beta-compatible range {expected_minecraft_range!r}")
     if "java" not in depends:
         fail(f"{path} missing java dependency")
     fabric_api_range = str(depends.get("fabric-api", ""))
@@ -82,11 +109,14 @@ def validate_mods_toml(jar: zipfile.ZipFile, path: str, platform_mod_id: str, mi
     assert_contains(text, f'modId="{platform_mod_id}"', path)
     assert_contains(text, 'modId="minecraft"', path)
     assert_contains(text, minecraft_version, path)
+    expected_minecraft_range = expected_mods_toml_minecraft_range(minecraft_version)
+    assert_contains(text, f'versionRange="{expected_minecraft_range}"', path)
     if platform_mod_id == "neoforge":
         assert_contains(text, 'loaderVersion="[1,)"', path)
         if not minecraft_version.startswith("26.1"):
             fail(f"Unsupported Minecraft version for this branch metadata validation: {minecraft_version}")
-        assert_contains(text, f'versionRange="[{minecraft_version},)"', path)
+        expected_runtime_range = expected_open_ended_runtime_range(minecraft_version)
+        assert_contains(text, f'versionRange="{expected_runtime_range}"', path)
 
 
 def validate_common_entries(jar: zipfile.ZipFile, loader: str, jar_path: Path) -> None:

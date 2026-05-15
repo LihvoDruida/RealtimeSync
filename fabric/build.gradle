@@ -40,10 +40,12 @@ dependencies {
 }
 
 processResources {
+    String resolvedMinecraftVersionRangeFabric = rootProject.ext.resolveMinecraftVersionRangeFabric()
+
     inputs.property 'version', project.version
     inputs.property 'loader_version', project.loader_version
     inputs.property 'fabric_version', project.fabric_version
-    inputs.property 'minecraft_version_range_fabric', project.minecraft_version_range_fabric
+    inputs.property 'minecraft_version_range_fabric', resolvedMinecraftVersionRangeFabric
     inputs.property 'java_version', project.java_version
 
     filesMatching('fabric.mod.json') {
@@ -51,7 +53,7 @@ processResources {
                 version: project.version,
                 loader_version: project.loader_version,
                 fabric_version: project.fabric_version,
-                minecraft_version_range_fabric: project.minecraft_version_range_fabric,
+                minecraft_version_range_fabric: resolvedMinecraftVersionRangeFabric,
                 java_version: project.java_version
         )
     }

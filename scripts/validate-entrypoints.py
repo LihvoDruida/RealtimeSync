@@ -93,7 +93,7 @@ def validate_neoforge() -> None:
 
     gradle_path = "neoforge/build.gradle"
     gradle = read(gradle_path)
-    require(gradle, "Missing required neoforge_version_range", gradle_path)
+    require(gradle, "resolveNeoForgeVersionRange()", gradle_path)
     forbid(gradle, "neoforgeDependencyVersionRange", gradle_path)
     forbid(gradle, ": project.neoforge_loader_version", gradle_path)
 

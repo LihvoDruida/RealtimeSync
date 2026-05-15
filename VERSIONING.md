@@ -37,9 +37,12 @@ realtime-sync-neoforge-26.1.2-1.4.0.jar
 
 ## Profile rules
 
-Every active profile must define exact versions for:
+Every active profile must define exact versions and derived beta-compatible runtime boundaries:
 
 ```properties
+minecraft_runtime_min_version=
+minecraft_runtime_max_version=
+minecraft_accept_beta=true
 fabric_loader_version=
 loader_version=
 fabric_version=
@@ -47,8 +50,11 @@ forge_version=
 forge_loader_version=
 neoforge_version=
 neoforge_loader_version=[1,)
-neoforge_version_range=
+neoforge_runtime_min_version=
+neoforge_accept_beta=true
 ```
+
+Do not hard-code `minecraft_version_range_fabric`, `minecraft_version_range_mods_toml` or `neoforge_version_range` in active profiles. Gradle derives them so beta lower bounds stay consistent across Fabric, Quilt, Forge and NeoForge.
 
 Wildcards are forbidden. Runtime loader metadata must match the selected loader and must not include foreign loader metadata.
 
