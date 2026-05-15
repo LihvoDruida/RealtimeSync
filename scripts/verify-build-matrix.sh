@@ -31,6 +31,18 @@ grep -q "id 'net.fabricmc.fabric-loom-remap' version '1.15.5' apply false" build
 grep -q "id 'net.minecraftforge.gradle' version '7.0.25' apply false" build.gradle || fail "Root build must use ForgeGradle 7.0.25"
 grep -q "id 'net.neoforged.moddev' version '2.0.141' apply false" build.gradle || fail "Root build must use NeoForge ModDev 2.0.141"
 
+if grep -q "workflow_dispatch" .github/workflows/package.yml; then
+  fail "Release workflow must not allow manual dispatch; builds must run only from v* tags"
+fi
+if grep -q "branches:" .github/workflows/package.yml; then
+  fail "Release workflow must not run on branch pushes; builds must run only from v* tags"
+fi
+grep -q "tags:" .github/workflows/package.yml || fail "Release workflow must declare tag trigger"
+grep -q "'v\*'" .github/workflows/package.yml || fail "Release workflow must trigger on v* tags"
+if grep -q "0.0.0-dev" .github/workflows/package.yml; then
+  fail "Release workflow must not create dev artifacts; version must come from the v* tag"
+fi
+
 grep -q "generate-ci-matrix.py --github-output" .github/workflows/package.yml || fail "Workflow must generate matrix from compatibility lock"
 grep -q "fromJson(needs.prepare-matrix.outputs.build_matrix)" .github/workflows/package.yml || fail "Workflow must consume generated matrix"
 grep -q "validate-dependency-artifacts.py" .github/workflows/package.yml || fail "Workflow must validate dependency coordinates"

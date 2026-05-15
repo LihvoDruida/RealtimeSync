@@ -62,3 +62,17 @@ NeoForge metadata must keep the language loader and runtime dependency ranges se
 
 - `neoforge_loader_version=[1,)` documents the JavaFML language-loader floor, but `neoforge.mods.toml` hard-codes `loaderVersion="[1,)"`;
 - `neoforge_version_range=[21.x,)` maps to the required `neoforge` dependency range.
+
+## Release workflow policy
+
+The `mc-1.21.x` GitHub Actions workflow is release-only. It runs only when a tag matching `v*` is pushed. Branch pushes and manual workflow dispatch are intentionally disabled so every produced artifact has a real release version.
+
+Example:
+
+```bash
+git checkout mc-1.21.x
+git pull origin mc-1.21.x
+git tag v1.4.0
+git push origin v1.4.0
+```
+

@@ -237,13 +237,24 @@ NeoForge keeps two ranges separate:
 
 ## GitHub Actions release flow
 
-`.github/workflows/package.yml` builds the 1.21–1.21.11 range on the `mc-1.21.x` branch and tag releases with a split matrix:
+`.github/workflows/package.yml` builds the 1.21–1.21.11 range only when a Git tag matching `v*` is pushed. Regular pushes to `mc-1.21.x` do not start CI builds, and manual `workflow_dispatch` is disabled for this branch.
 
 ```txt
 mc_profile x loader
 ```
 
 That means Fabric, Quilt, Forge and NeoForge are isolated per Minecraft version. A broken loader no longer hides which target failed, and disabled targets such as Forge `1.21.2` are skipped before loader-specific dependencies are resolved.
+
+The tag is the release version source. The workflow fails on non-tag refs instead of producing `0.0.0-dev` artifacts.
+
+Release example:
+
+```bash
+git checkout mc-1.21.x
+git pull origin mc-1.21.x
+git tag v1.4.0
+git push origin v1.4.0
+```
 
 For each enabled matrix target the workflow:
 
