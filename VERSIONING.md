@@ -90,7 +90,7 @@ Do not downgrade the wrapper while this branch supports the newer `1.21.10` / `1
 
 ## CI matrix and artifact validation
 
-`.github/workflows/package.yml` generates the matrix from `config/build-compatibility.lock.json`. The workflow runs on the `mc-1.21.x` branch and on `v*` tags.
+`.github/workflows/package.yml` generates the matrix from `config/build-compatibility.lock.json`. The workflow runs only when a tag matching `v*` is pushed. Branch pushes and manual `workflow_dispatch` are intentionally disabled, so every produced artifact has a real release version.
 
 Run the same validation locally before pushing:
 
