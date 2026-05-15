@@ -3,9 +3,9 @@
   "generatedBy": "RealtimeSync compatibility lock",
   "policy": {
     "versioning": "Every active Minecraft profile pins exact loader dependency versions. Wildcards are forbidden for runtime build dependencies.",
-    "java": "1.21.x uses Java 21; 26.1.x uses Java 25.",
+    "java": "Minecraft 1.21.x profiles use Java 21.",
     "ci": "CI builds only combinations marked supported=true in this lock and mirrored by buildProfiles/*.properties.",
-    "fabricMappings": "Minecraft 1.21.x Fabric/Quilt builds use fabric-loom-remap with explicit officialMojangMappings(); Minecraft 26.1.x is unobfuscated and must use net.fabricmc.fabric-loom with no mappings dependency."
+    "fabricMappings": "Minecraft 1.21.x Fabric/Quilt builds use fabric-loom-remap with explicit officialMojangMappings()."
   },
   "loaders": [
     "fabric",
@@ -25,10 +25,7 @@
     "1.21.8",
     "1.21.9",
     "1.21.10",
-    "1.21.11",
-    "26.1",
-    "26.1.1",
-    "26.1.2"
+    "1.21.11"
   ],
   "profiles": {
     "1.21": {
@@ -522,129 +519,6 @@
         "serverTicks": "reflective tick de-duplication for per-level events"
       },
       "fabricMappings": "official-mojang-with-loom-remap"
-    },
-    "26.1": {
-      "minecraftVersion": "26.1",
-      "nextMinecraftVersion": "26.1.1",
-      "javaVersion": 25,
-      "fabricLoader": "0.19.2",
-      "fabricApi": "0.145.1+26.1",
-      "loaders": {
-        "fabric": {
-          "supported": true,
-          "artifact": "net.fabricmc.fabric-api:fabric-api:0.145.1+26.1",
-          "notes": "Fabric-compatible 26.1.x build using Fabric Loader/API in the official namespace; no Loom mappings dependency is allowed."
-        },
-        "quilt": {
-          "supported": true,
-          "artifact": "net.fabricmc.fabric-api:fabric-api:0.145.1+26.1",
-          "notes": "Fabric-compatible 26.1.x build using Fabric Loader/API in the official namespace; no Loom mappings dependency is allowed."
-        },
-        "forge": {
-          "supported": true,
-          "version": "62.0.9",
-          "loaderRange": "[62,)",
-          "artifact": "net.minecraftforge:forge:26.1-62.0.9",
-          "notes": "ForgeGradle 7 userdev build."
-        },
-        "neoforge": {
-          "supported": true,
-          "version": "26.1.0.19-beta",
-          "loaderRange": "[1,)",
-          "versionRange": "[26.1,)",
-          "artifact": "net.neoforged:neoforge:26.1.0.19-beta",
-          "notes": "NeoForge ModDev build with exact version pin."
-        }
-      },
-      "compatibilityGuards": {
-        "timeAccess": "reflective ServerLevel/LevelData day-time accessor",
-        "gamerules": "reflective daylight gamerule resolver",
-        "dimensions": "reflective dimension key normalization",
-        "serverTicks": "reflective tick de-duplication for per-level events"
-      },
-      "fabricMappings": "none-unobfuscated-official-namespace"
-    },
-    "26.1.1": {
-      "minecraftVersion": "26.1.1",
-      "nextMinecraftVersion": "26.1.2",
-      "javaVersion": 25,
-      "fabricLoader": "0.19.2",
-      "fabricApi": "0.145.4+26.1.1",
-      "loaders": {
-        "fabric": {
-          "supported": true,
-          "artifact": "net.fabricmc.fabric-api:fabric-api:0.145.4+26.1.1",
-          "notes": "Fabric-compatible 26.1.x build using Fabric Loader/API in the official namespace; no Loom mappings dependency is allowed."
-        },
-        "quilt": {
-          "supported": true,
-          "artifact": "net.fabricmc.fabric-api:fabric-api:0.145.4+26.1.1",
-          "notes": "Fabric-compatible 26.1.x build using Fabric Loader/API in the official namespace; no Loom mappings dependency is allowed."
-        },
-        "forge": {
-          "supported": true,
-          "version": "63.0.2",
-          "loaderRange": "[63,)",
-          "artifact": "net.minecraftforge:forge:26.1.1-63.0.2",
-          "notes": "ForgeGradle 7 userdev build."
-        },
-        "neoforge": {
-          "supported": true,
-          "version": "26.1.1.15-beta",
-          "loaderRange": "[1,)",
-          "versionRange": "[26.1.1,)",
-          "artifact": "net.neoforged:neoforge:26.1.1.15-beta",
-          "notes": "NeoForge ModDev build with exact version pin."
-        }
-      },
-      "compatibilityGuards": {
-        "timeAccess": "reflective ServerLevel/LevelData day-time accessor",
-        "gamerules": "reflective daylight gamerule resolver",
-        "dimensions": "reflective dimension key normalization",
-        "serverTicks": "reflective tick de-duplication for per-level events"
-      },
-      "fabricMappings": "none-unobfuscated-official-namespace"
-    },
-    "26.1.2": {
-      "minecraftVersion": "26.1.2",
-      "nextMinecraftVersion": "26.1.3",
-      "javaVersion": 25,
-      "fabricLoader": "0.19.2",
-      "fabricApi": "0.148.0+26.1.2",
-      "loaders": {
-        "fabric": {
-          "supported": true,
-          "artifact": "net.fabricmc.fabric-api:fabric-api:0.148.0+26.1.2",
-          "notes": "Fabric-compatible 26.1.x build using Fabric Loader/API in the official namespace; no Loom mappings dependency is allowed."
-        },
-        "quilt": {
-          "supported": true,
-          "artifact": "net.fabricmc.fabric-api:fabric-api:0.148.0+26.1.2",
-          "notes": "Fabric-compatible 26.1.x build using Fabric Loader/API in the official namespace; no Loom mappings dependency is allowed."
-        },
-        "forge": {
-          "supported": true,
-          "version": "64.0.7",
-          "loaderRange": "[64,)",
-          "artifact": "net.minecraftforge:forge:26.1.2-64.0.7",
-          "notes": "ForgeGradle 7 userdev build."
-        },
-        "neoforge": {
-          "supported": true,
-          "version": "26.1.2.36-beta",
-          "loaderRange": "[1,)",
-          "versionRange": "[26.1.2,)",
-          "artifact": "net.neoforged:neoforge:26.1.2.36-beta",
-          "notes": "NeoForge ModDev build with exact version pin."
-        }
-      },
-      "compatibilityGuards": {
-        "timeAccess": "reflective ServerLevel/LevelData day-time accessor",
-        "gamerules": "reflective daylight gamerule resolver",
-        "dimensions": "reflective dimension key normalization",
-        "serverTicks": "reflective tick de-duplication for per-level events"
-      },
-      "fabricMappings": "none-unobfuscated-official-namespace"
     }
   }
 }

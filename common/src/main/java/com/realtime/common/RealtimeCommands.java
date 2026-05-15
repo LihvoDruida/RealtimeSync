@@ -10,9 +10,8 @@ import java.util.concurrent.ConcurrentMap;
 /**
  * Reflection-backed Minecraft command execution used only as a compatibility fallback.
  *
- * <p>Minecraft 26.1 replaced the old level day-time methods with the World Clock
- * system. The public command syntax is the most stable surface for controlling
- * clocks across Fabric/Quilt/Forge/NeoForge while direct APIs are still moving.</p>
+ * <p>The public command syntax is used only as a last-resort fallback when
+ * direct/reflection time access is not available on a specific server runtime.</p>
  */
 public final class RealtimeCommands {
     private static final ConcurrentMap<Class<?>, Method> GET_COMMANDS_METHODS = new ConcurrentHashMap<>();

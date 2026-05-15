@@ -11,9 +11,10 @@ import java.util.concurrent.ConcurrentMap;
 /**
  * Cross-version world time access.
  *
- * <p>1.21.x exposes day-time through level/level-data APIs, while 26.1.x moved
- * time to the World Clock system. This helper first uses direct/reflection APIs
- * when available, then falls back to a command-backed clock mode for 26.1.x.</p>
+ * <p>The 1.21.x profiles expose day-time through level/level-data APIs, but
+ * method names and mappings are not stable across the whole range. This helper
+ * resolves compatible accessors reflectively and keeps a command-backed fallback
+ * for custom or future server runtimes.</p>
  */
 public final class RealtimeWorldTime {
     private static final long TICKS_PER_DAY = 24000L;
@@ -77,7 +78,7 @@ public final class RealtimeWorldTime {
                 FALLBACK_TIMES.put(dimensionId, normalized);
                 return true;
             } catch (RuntimeException ignored) {
-                // Fall through to command-backed 26.1 world clock mode.
+                // Fall through to command-backed time fallback.
             }
         }
 

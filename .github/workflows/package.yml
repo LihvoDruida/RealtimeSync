@@ -2,6 +2,8 @@ name: Build and Release
 
 on:
   push:
+    branches:
+      - mc-1.21.x
     tags:
       - 'v*'
   workflow_dispatch:

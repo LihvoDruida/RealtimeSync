@@ -10,7 +10,7 @@ Current profiles cover:
 
 ```txt
 1.21, 1.21.1, 1.21.2, 1.21.3, 1.21.4, 1.21.5,
-1.21.6, 1.21.7, 1.21.8, 1.21.9, 1.21.10, 1.21.11, 26.1, 26.1.1, 26.1.2
+1.21.6, 1.21.7, 1.21.8, 1.21.9, 1.21.10, 1.21.11
 ```
 
 Each version has its own file in `buildProfiles/<minecraft-version>.properties`.
@@ -33,7 +33,7 @@ Do **not** upload one universal jar for every loader. Publish the correct jar fo
 ## Features
 
 - Server-side only; clients do not need the mod installed.
-- Per-version build profiles for the full 1.21 through 1.21.11 plus 26.1 through 26.1.2 range.
+- Per-version build profiles for the Minecraft 1.21.x line only.
 - Separate Fabric, Quilt-tagged, Forge and NeoForge artifacts.
 - No mixins.
 - No Cloth Config or AutoConfig dependency.
@@ -218,12 +218,12 @@ enable_forge=true
 enable_neoforge=true
 
 loader_version=0.18.4
-fabric_version=0.128.2+1.21.5
+fabric_version=0.141.3+1.21.11
 
 forge_version=61.1.5
 forge_loader_version=[61,)
 
-neoforge_version=21.5.95
+neoforge_version=21.11.0-beta
 neoforge_loader_version=[21.11,)
 ```
 
@@ -231,7 +231,7 @@ Fabric API is pinned to an exact artifact per profile and still checked by Gradl
 
 ## GitHub Actions release flow
 
-`.github/workflows/package.yml` builds the 1.21–1.21.11 plus 26.1–26.1.2 range with a split matrix:
+`.github/workflows/package.yml` builds the 1.21–1.21.11 range on the `mc-1.21.x` branch and tag releases with a split matrix:
 
 ```txt
 mc_profile x loader
@@ -297,44 +297,23 @@ This project is licensed under **CC0-1.0**, according to the included [`LICENSE`
 
 ## Build requirements
 
-Requires the Java version declared by the selected profile: Java 21 for the 1.21.x profiles and Java 25 for the 26.1.x profiles. The bundled Gradle Wrapper is 9.4.0 because the 26.1.x toolchain needs the newer Gradle runtime. Use `./gradlew` from this repository.
-
+Requires Java 21 for every active Minecraft `1.21.x` profile. Use the bundled `./gradlew` wrapper from this repository.
 
 ## Build toolchain notes
 
-- Gradle wrapper is pinned to 9.4.0 so modern Fabric Loom Remap 1.15.x and ForgeGradle 7.x can resolve Minecraft 1.21.10/1.21.11 correctly.
+- Active branch target: `mc-1.21.x`.
+- Gradle wrapper is pinned to 9.4.0 so Fabric Loom Remap 1.15.x and ForgeGradle 7.x resolve the newer 1.21.x profiles correctly.
 - ForgeGradle 6.x is not used because it fails on newer Forge 60.x/61.x userdev artifacts.
-- A disabled loader in `buildProfiles/<version>.properties` is skipped before its loader-specific dependencies are resolved. This prevents placeholder values such as `forge_version=unsupported` from breaking profile tasks.
-- ForgeGradle 7 run configs must use `workingDir.convention(...)` or `workingDir = ...`; the old `workingDirectory(...)` MDK syntax fails during project configuration.
-- ForgeGradle 7 Forge dependencies use `implementation minecraft.dependency("net.minecraftforge:forge:${minecraft_version}-${forge_version}")`; do not use the old ForgeGradle 6 `minecraft "..."` dependency notation.
-
-
-### Build compatibility notes
-
-The 1.21.x matrix intentionally avoids direct `GameRules` imports in loader entrypoints because Mojang mappings and gamerule identifiers are not stable across every 1.21.x profile. The mod also does not call `/gamerule doDaylightCycle false`: Minecraft 1.21.11 renamed gamerules to namespaced IDs such as `minecraft:advance_time`, while older profiles still use `doDaylightCycle`. Instead, the loader entrypoints set the boolean gamerule through reflection and try the known runtime key names (`DO_DAYLIGHT_CYCLE`, `ADVANCE_TIME`, `RULE_DAYLIGHT`, `RULE_ADVANCE_TIME`) plus the stable intermediary field (`field_19396`). Forge avoids the Forge event bus entirely and uses `ServerLifecycleHooks` with a safe server-thread scheduler because Forge 1.21.6+ exposes EventBus 7 migration helpers instead of the older APIs. NeoForge profile versions are pinned exactly; do not use `21.x.+` with ModDev/NeoForm because it is resolved as a literal userdev artifact in this setup.
-
+- A disabled loader in `buildProfiles/<version>.properties` is skipped before loader-specific dependencies are resolved. This prevents placeholder values such as `forge_version=unsupported` from breaking profile tasks.
+- Fabric and Quilt always use `net.fabricmc.fabric-loom-remap` with `loom.officialMojangMappings()` on this branch.
 
 ### CI loader isolation
 
 CI builds each `mc_profile x loader` pair separately using `-PtargetLoader=<loader>`. This prevents metadata-only or Fabric/Quilt/NeoForge jobs from configuring Forge userdev artifacts, which is important for fragile ForgeGradle/Mavenizer versions such as Minecraft `1.21.10`.
 
-
-## Minecraft 26.1.x profiles
-
-Active profiles are included for `26.1`, `26.1.1` and `26.1.2`. These profiles use Java 25, Fabric Loader `0.18.4`, pinned Fabric API versions, exact Forge versions and exact NeoForge versions. The 26.1.x NeoForge metadata uses `loaderVersion=[1,)` for `javafml` and a separate `neoforge_version_range` dependency range so the mod metadata matches current NeoForge 26.x conventions.
-
-Current pinned profile values:
-
-| Profile | Java | Fabric API | Forge | NeoForge |
-| --- | --- | --- | --- | --- |
-| `26.1` | 25 | `0.145.1+26.1` | `62.0.9` | `26.1.0.19-beta` |
-| `26.1.1` | 25 | `0.145.4+26.1.1` | `63.0.2` | `26.1.1.15-beta` |
-| `26.1.2` | 25 | `0.148.0+26.1.2` | `64.0.7` | `26.1.2.36-beta` |
-
-
 ## Verified dependency profiles
 
-Active `buildProfiles/*.properties` are dependency-locked. Run:
+Active `buildProfiles/*.properties` are dependency-locked and limited to Minecraft `1.21.x` only. Run:
 
 ```bash
 python3 scripts/validate-build-profiles.py
@@ -346,13 +325,7 @@ Important rules:
 - Fabric API is pinned per Minecraft profile instead of `0.+` to avoid non-reproducible releases.
 - Forge `1.21.2` is intentionally disabled because the active Forge downloads list does not provide a normal Forge artifact for that Minecraft version.
 - Forge `1.21.10` is pinned to `60.1.0` instead of latest `60.1.9`, because `60.1.9` can fail in ForgeGradle Mavenizer on GitHub-hosted runners.
-- Minecraft `26.1.x` profiles use Java 25 and exact Fabric/Forge/NeoForge artifacts.
-
-
-### Minecraft 26.1.x time API compatibility
-
-Minecraft 26.1.x no longer exposes the same `ServerLevel#getDayTime()` / `ServerLevel#setDayTime(...)` convenience methods in the mapped API used by every loader build. RealtimeSync reads and writes day time through the reflective compatibility helper (`RealtimeWorldTime`) so the same common runtime compiles for both `1.21.x` and `26.1.x`, even when direct `ServerLevel` convenience methods disappear or move.
-
+- Every active profile uses Java 21.
 
 ## Compatibility lock and supported matrix
 
@@ -367,19 +340,7 @@ bash scripts/verify-build-matrix.sh
 ```
 
 Use `python3 scripts/validate-dependency-artifacts.py --online` when you need to probe Maven/Fabric/Forge/NeoForge repositories directly. See `docs/COMPATIBILITY.md` for the full process.
-## Minecraft 26.1.x Fabric/Quilt builds
-
-Minecraft 26.1.x is treated differently from 1.21.x for Fabric-compatible builds.
-Fabric Loader and Fabric API exist for 26.1.x, but the build script must not request `loom.officialMojangMappings()` for those profiles.
-The 26.1.x game jars are already in the official namespace, so the Fabric and Quilt modules switch to `net.fabricmc.fabric-loom`, remove the `mappings` dependency, and use standard `implementation` dependencies.
-
-For 1.21.x, the modules still use `net.fabricmc.fabric-loom-remap` with explicit `loom.officialMojangMappings()`.
-
 
 ### Fabric/Quilt lifecycle compatibility
 
-Fabric/Quilt entrypoints intentionally use only `ServerTickEvents.END_SERVER_TICK`.
-Do not reintroduce `ServerWorldEvents.LOAD`: Fabric API `26.1.x` does not expose
-that class in `net.fabricmc.fabric.api.event.lifecycle.v1`, so using it breaks the
-`26.1`, `26.1.1`, and `26.1.2` Fabric/Quilt builds. The common controller performs
-initial daylight-cycle guarding and the first sync from the server tick path instead.
+Fabric/Quilt entrypoints intentionally use only `ServerTickEvents.END_SERVER_TICK`. Do not reintroduce separate world-load lifecycle handling unless all active `1.21.x` Fabric API profiles are verified. The common controller performs initial daylight-cycle guarding and the first sync from the server tick path instead.

@@ -18,14 +18,13 @@ python3 -m py_compile \
   scripts/validate-dependency-artifacts.py \
   scripts/validate-jar-metadata.py \
   scripts/check-ci-matrix.py \
-  scripts/check-fabric-loom-branches.py
+  scripts/check-fabric-loom-1-21.py
 python3 scripts/generate-ci-matrix.py >/tmp/realtime-sync-matrix.json
 python3 scripts/check-ci-matrix.py
-python3 scripts/check-fabric-loom-branches.py
+python3 scripts/check-fabric-loom-1-21.py
 
-grep -q "gradle-9.4.0-bin.zip" gradle/wrapper/gradle-wrapper.properties || fail "Gradle wrapper must be 9.4.0 for 26.1.x"
+grep -q "gradle-9.4.0-bin.zip" gradle/wrapper/gradle-wrapper.properties || fail "Gradle wrapper must stay on 9.4.0 for the 1.21.x build toolchain"
 grep -q "id 'net.fabricmc.fabric-loom-remap' version '1.15.5' apply false" build.gradle || fail "Root build must use Fabric Loom Remap 1.15.5 for 1.21.x"
-grep -q "id 'net.fabricmc.fabric-loom' version '1.15.5' apply false" build.gradle || fail "Root build must use Fabric Loom 1.15.5 for 26.1.x unobfuscated builds"
 grep -q "id 'net.minecraftforge.gradle' version '7.0.25' apply false" build.gradle || fail "Root build must use ForgeGradle 7.0.25"
 grep -q "id 'net.neoforged.moddev' version '2.0.141' apply false" build.gradle || fail "Root build must use NeoForge ModDev 2.0.141"
 
@@ -40,7 +39,7 @@ if grep -R -E --exclude="*.example" "^(fabric_version|forge_version|neoforge_ver
 fi
 
 if grep -R --exclude="verify-build-matrix.sh" "gradle-9.2.1-bin.zip\|gradle-9.3.0-bin.zip\|Gradle Wrapper 9.2.1\|Gradle Wrapper 9.3.0" -n build.gradle settings.gradle README.md VERSIONING.md gradle/wrapper .github buildProfiles scripts config docs; then
-  fail "Old Gradle 9.2.1/9.3.0 references remain; the 26.1.x matrix requires Gradle 9.4.0"
+  fail "Old Gradle 9.2.1/9.3.0 references remain; the 1.21.x matrix is pinned to Gradle 9.4.0"
 fi
 
 if grep -R --exclude="verify-build-matrix.sh" "workingDirectory[[:space:]]" -n forge/build.gradle; then
@@ -73,14 +72,13 @@ if grep -R "gamerule doDaylightCycle\|gamerule minecraft:advance_time" common fa
 fi
 
 grep -R "DO_DAYLIGHT_CYCLE" common/src/main/java >/dev/null || fail "Common runtime must try the legacy daylight gamerule key DO_DAYLIGHT_CYCLE"
-grep -R "ADVANCE_TIME" common/src/main/java >/dev/null || fail "Common runtime must try the 1.21.11/26.x daylight gamerule key ADVANCE_TIME"
+grep -R "ADVANCE_TIME" common/src/main/java >/dev/null || fail "Common runtime must try the 1.21.11 daylight gamerule key ADVANCE_TIME"
 grep -R "RealtimeWorldTime.readDayTime" common/src/main/java >/dev/null || fail "Runtime must use RealtimeWorldTime for day-time reads"
 grep -R "RealtimeWorldTime.setDayTime" common/src/main/java >/dev/null || fail "Runtime must use RealtimeWorldTime for day-time writes"
-grep -R "time of " common/src/main/java/com/realtime/common/RealtimeWorldTime.java >/dev/null || fail "26.1.x fallback must use World Clock commands when direct time APIs are unavailable"
 grep -R "RealtimeServerState.tickCount" common/src/main/java >/dev/null || fail "Runtime must de-duplicate per-level tick events through RealtimeServerState"
 
 if grep -R "ServerWorldEvents" fabric/src/main/java quilt/src/main/java -n 2>/dev/null; then
-  fail "Fabric/Quilt source must not use ServerWorldEvents; Fabric API 26.1.x does not expose it in the lifecycle package"
+  fail "Fabric/Quilt source must not use ServerWorldEvents; this branch keeps Fabric lifecycle handling centralized on the server tick path"
 fi
 
 if grep -R "net.minecraftforge.eventbus.api.SubscribeEvent\|@SubscribeEvent\|MinecraftForge.EVENT_BUS" forge/src/main/java -n; then

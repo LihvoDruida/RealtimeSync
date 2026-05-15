@@ -23,7 +23,6 @@ public final class RealtimeFabric implements ModInitializer {
         Path configDir = FabricLoader.getInstance().getConfigDir();
         controller = new RealtimeController(configDir, LOG);
 
-        // Fabric API 26.1.x no longer exposes the Fabric world-load lifecycle event in the same lifecycle package.
         // Keep Fabric/Quilt entrypoints on the stable server tick event and let the common
         // controller perform startup/world daylight guards on the first server tick.
         ServerTickEvents.END_SERVER_TICK.register(controller::onServerTick);
