@@ -36,7 +36,7 @@ public final class RealtimeServerState {
     private static Method findTickMethod(Class<?> serverClass) {
         for (String methodName : new String[]{"getTickCount", "getTicks"}) {
             for (Method method : serverClass.getMethods()) {
-                if (method.getName().equals(methodName) && method.getParameterCount() == 0 && isNumeric(method.getReturnType())) {
+                if (method.getName().equals(methodName) && method.getParameterCount() == 0 && RealtimeReflection.isNumeric(method.getReturnType())) {
                     method.setAccessible(true);
                     return method;
                 }
@@ -45,7 +45,4 @@ public final class RealtimeServerState {
         return null;
     }
 
-    private static boolean isNumeric(Class<?> type) {
-        return type == int.class || type == long.class || Number.class.isAssignableFrom(type);
-    }
 }

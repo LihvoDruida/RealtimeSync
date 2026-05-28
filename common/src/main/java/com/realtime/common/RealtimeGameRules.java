@@ -6,6 +6,9 @@ import net.minecraft.server.level.ServerLevel;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 public final class RealtimeGameRules {
     private static final List<String> DAYLIGHT_RULE_FIELD_NAMES = List.of(
@@ -17,9 +20,9 @@ public final class RealtimeGameRules {
     );
 
     private final RealtimeLog logger;
-    private Resolution cachedResolution;
-    private boolean resolutionAttempted = false;
-    private boolean missingRuleWarningShown = false;
+    private final ConcurrentMap<Class<?>, Resolution> resolvedByGameRulesClass = new ConcurrentHashMap<>();
+    private final Set<Class<?>> unresolvedGameRulesClasses = ConcurrentHashMap.newKeySet();
+    private volatile boolean missingRuleWarningShown = false;
 
     public RealtimeGameRules(RealtimeLog logger) {
         this.logger = logger;
@@ -47,17 +50,24 @@ public final class RealtimeGameRules {
             return false;
         }
 
-        if (cachedResolution != null && cachedResolution.trySet(gameRules, server, value)) {
-            return true;
+        Class<?> gameRulesClass = gameRules.getClass();
+        Resolution cached = resolvedByGameRulesClass.get(gameRulesClass);
+        if (cached != null) {
+            return cached.trySet(gameRules, server, value);
+        }
+        if (unresolvedGameRulesClasses.contains(gameRulesClass)) {
+            warnMissingRuleOnce(gameRulesClass, true);
+            return false;
         }
 
         Resolution resolved = resolve(gameRules, server, value);
         if (resolved == null) {
-            warnMissingRuleOnce();
+            unresolvedGameRulesClasses.add(gameRulesClass);
+            warnMissingRuleOnce(gameRulesClass, false);
             return false;
         }
 
-        cachedResolution = resolved;
+        resolvedByGameRulesClass.put(gameRulesClass, resolved);
         return true;
     }
 
@@ -107,18 +117,18 @@ public final class RealtimeGameRules {
             }
         }
 
-        resolutionAttempted = true;
         return null;
     }
 
-    private void warnMissingRuleOnce() {
+    private void warnMissingRuleOnce(Class<?> gameRulesClass, boolean cachedFailure) {
         if (missingRuleWarningShown) {
             return;
         }
 
         missingRuleWarningShown = true;
-        String retryNote = resolutionAttempted ? " The lookup was already attempted and cached as unavailable for this runtime." : "";
-        logger.warn("Could not disable vanilla daylight cycle: no compatible daylight gamerule key was found.{}", retryNote);
+        String cacheNote = cachedFailure ? " The unavailable lookup is cached for this runtime." : "";
+        logger.warn("Could not disable vanilla daylight cycle: no compatible daylight gamerule key was found on {}.{}",
+                gameRulesClass.getName(), cacheNote);
     }
 
     private static Field findField(Class<?> type, String fieldName) {
@@ -144,7 +154,7 @@ public final class RealtimeGameRules {
             if (!parameterTypes[0].isAssignableFrom(key.getClass())) {
                 continue;
             }
-            if (!acceptsBooleanValue(parameterTypes[1])) {
+            if (!RealtimeReflection.acceptsBooleanValue(parameterTypes[1])) {
                 continue;
             }
             if (!parameterTypes[2].isAssignableFrom(server.getClass())) {
@@ -183,7 +193,7 @@ public final class RealtimeGameRules {
             }
 
             Class<?>[] parameterTypes = method.getParameterTypes();
-            if (!acceptsBooleanValue(parameterTypes[0])) {
+            if (!RealtimeReflection.acceptsBooleanValue(parameterTypes[0])) {
                 continue;
             }
             if (!parameterTypes[1].isAssignableFrom(server.getClass())) {
@@ -195,10 +205,6 @@ public final class RealtimeGameRules {
         }
 
         return null;
-    }
-
-    private static boolean acceptsBooleanValue(Class<?> type) {
-        return type == boolean.class || type == Boolean.class || type.isAssignableFrom(Boolean.class);
     }
 
     private static final class Resolution {

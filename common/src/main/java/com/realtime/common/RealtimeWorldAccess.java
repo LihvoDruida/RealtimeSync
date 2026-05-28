@@ -16,7 +16,7 @@ public final class RealtimeWorldAccess {
     }
 
     public static MinecraftServer server(ServerLevel level) {
-        Method method = SERVER_METHODS.computeIfAbsent(level.getClass(), type -> findZeroArgMethod(type, "getServer"));
+        Method method = SERVER_METHODS.computeIfAbsent(level.getClass(), type -> RealtimeReflection.findZeroArgMethod(type, "getServer"));
         if (method == null) {
             return null;
         }
@@ -26,21 +26,11 @@ public final class RealtimeWorldAccess {
     }
 
     public static Object gameRules(ServerLevel level) {
-        Method method = GAME_RULES_METHODS.computeIfAbsent(level.getClass(), type -> findZeroArgMethod(type, "getGameRules"));
+        Method method = GAME_RULES_METHODS.computeIfAbsent(level.getClass(), type -> RealtimeReflection.findZeroArgMethod(type, "getGameRules"));
         if (method == null) {
             return null;
         }
         return invoke(method, level);
-    }
-
-    private static Method findZeroArgMethod(Class<?> type, String name) {
-        for (Method method : type.getMethods()) {
-            if (method.getName().equals(name) && method.getParameterCount() == 0) {
-                method.setAccessible(true);
-                return method;
-            }
-        }
-        return null;
     }
 
     private static Object invoke(Method method, Object target) {

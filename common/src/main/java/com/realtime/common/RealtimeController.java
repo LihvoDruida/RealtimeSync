@@ -106,17 +106,17 @@ public final class RealtimeController {
         try {
             boolean customDayLengthMode = config.customDayLengthMinutes > 0;
             long targetTicks = customDayLengthMode
-                    ? timeMath.calculateCustomTicks(readOverworldTime(server), config.updateInterval, config.customDayLengthMinutes)
+                    ? timeMath.calculateCustomTicks(readOverworldTime(server), config.customDayLengthMinutes)
                     : timeMath.calculateRealtimeTicks(config.offsetHours);
 
             int syncedWorlds = applyTime(server, targetTicks, customDayLengthMode);
 
             if (config.debugLogging) {
-                logger.info("Synced {} world(s) toward {} ticks. Mode: {}, syncMode: {}.",
+                logger.info("Synced {} world(s) toward {} ticks. Mode: {}, effectiveSync: {}.",
                         syncedWorlds,
                         targetTicks,
-                        config.customDayLengthMinutes > 0 ? "custom-day-length" : "real-time",
-                        config.syncMode);
+                        customDayLengthMode ? "custom-day-length" : "real-time",
+                        customDayLengthMode ? "direct-custom-clock" : config.syncMode);
             }
         } catch (RuntimeException exception) {
             logger.error("Failed to synchronize Minecraft time.", exception);

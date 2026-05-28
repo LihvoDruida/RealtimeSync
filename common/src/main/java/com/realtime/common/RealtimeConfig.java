@@ -121,7 +121,7 @@ public final class RealtimeConfig {
         int originalMaxSmoothStepTicks = maxSmoothStepTicks;
         int originalSmoothSnapThresholdTicks = smoothSnapThresholdTicks;
         int originalSmoothCatchupDivisor = smoothCatchupDivisor;
-        String originalSyncMode = syncMode;
+        String originalSyncMode = syncMode == null ? "" : syncMode;
 
         updateInterval = clamp(updateInterval, MIN_UPDATE_INTERVAL_TICKS, MAX_UPDATE_INTERVAL_TICKS);
         offsetHours = clamp(offsetHours, -23, 23);
@@ -129,7 +129,7 @@ public final class RealtimeConfig {
         maxSmoothStepTicks = clamp(maxSmoothStepTicks, MIN_SMOOTH_STEP_TICKS, MAX_SMOOTH_STEP_TICKS);
         smoothSnapThresholdTicks = clamp(smoothSnapThresholdTicks, MIN_SMOOTH_SNAP_THRESHOLD_TICKS, MAX_SMOOTH_SNAP_THRESHOLD_TICKS);
         smoothCatchupDivisor = clamp(smoothCatchupDivisor, MIN_SMOOTH_CATCHUP_DIVISOR, MAX_SMOOTH_CATCHUP_DIVISOR);
-        syncMode = normalizeSyncMode(syncMode, logger);
+        syncMode = normalizeSyncMode(syncMode);
         syncDimensionSet = parseDimensionSet(syncDimensions, "syncDimensions", logger);
         ignoredDimensionSet = parseDimensionSet(ignoredDimensions, "ignoredDimensions", logger);
         syncDimensions = joinDimensionSet(syncDimensionSet);
@@ -179,7 +179,7 @@ public final class RealtimeConfig {
                 + "# ignoredDimensions: comma-separated denylist excluded from syncing. Empty = none.\n"
                 + "# Example: some_mod:custom_dimension\n"
                 + "ignoredDimensions=" + ignoredDimensions + "\n\n"
-                + "# syncMode: instant or smooth. smooth is recommended for realistic sun/moon movement.\n"
+                + "# syncMode: instant or smooth. smooth is used only for real clock sync; customDayLengthMinutes uses its own direct clock.\n"
                 + "syncMode=" + syncMode + "\n\n"
                 + "# maxSmoothStepTicks: hard cap for Minecraft ticks changed per sync when syncMode=smooth.\n"
                 + "# With updateInterval=20 and maxSmoothStepTicks=12, the fastest catch-up is still visually smooth.\n"
@@ -198,17 +198,18 @@ public final class RealtimeConfig {
                 + "# offsetHours: real-time offset from server system time. Range: -23..23.\n"
                 + "offsetHours=" + offsetHours + "\n\n"
                 + "# customDayLengthMinutes: 0 = real clock sync. Greater than 0 = custom Minecraft day length in real minutes.\n"
+                + "# Example: customDayLengthMinutes=40 makes one full Minecraft day last 40 real minutes.\n"
                 + "customDayLengthMinutes=" + customDayLengthMinutes + "\n\n"
                 + "# debugLogging: true/false - enables detailed time sync logs.\n"
                 + "debugLogging=" + debugLogging + "\n";
     }
 
-    private static String normalizeSyncMode(String value, RealtimeLog logger) {
+    private static String normalizeSyncMode(String value) {
         if (value == null || value.isBlank()) {
             return SYNC_MODE_SMOOTH;
         }
 
-        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        String normalized = cleanValue(value).toLowerCase(Locale.ROOT);
         if (SYNC_MODE_INSTANT.equals(normalized) || SYNC_MODE_SMOOTH.equals(normalized)) {
             return normalized;
         }
@@ -224,7 +225,7 @@ public final class RealtimeConfig {
         Set<String> values = new LinkedHashSet<>();
         String[] parts = rawValue.split(",");
         for (String part : parts) {
-            String value = part.trim().toLowerCase(Locale.ROOT);
+            String value = cleanValue(part).toLowerCase(Locale.ROOT);
             if (value.isEmpty()) {
                 continue;
             }
@@ -248,7 +249,7 @@ public final class RealtimeConfig {
             return fallback;
         }
 
-        String normalized = rawValue.trim().toLowerCase(Locale.ROOT);
+        String normalized = cleanValue(rawValue).toLowerCase(Locale.ROOT);
         if ("true".equals(normalized)) {
             return true;
         }
@@ -267,7 +268,7 @@ public final class RealtimeConfig {
         }
 
         try {
-            return Integer.parseInt(rawValue.trim());
+            return Integer.parseInt(cleanValue(rawValue));
         } catch (NumberFormatException exception) {
             logger.warn("Invalid integer config value {}={}. Using {}.", key, rawValue, fallback);
             return fallback;
@@ -285,7 +286,7 @@ public final class RealtimeConfig {
                 continue;
             }
 
-            logger.warn("Config key {} is deprecated/ambiguous. Please use customDayLengthMinutes={} instead.", alias, rawValue.trim());
+            logger.warn("Config key {} is deprecated/ambiguous. Please use customDayLengthMinutes={} instead.", alias, cleanValue(rawValue));
             return readInt(properties, alias, fallback, logger);
         }
 
@@ -297,7 +298,19 @@ public final class RealtimeConfig {
         if (rawValue == null) {
             return fallback;
         }
-        return rawValue.trim();
+        return cleanValue(rawValue);
+    }
+
+    private static String cleanValue(String rawValue) {
+        String value = rawValue == null ? "" : rawValue.trim();
+        if (value.length() >= 2) {
+            char first = value.charAt(0);
+            char last = value.charAt(value.length() - 1);
+            if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
+                return value.substring(1, value.length() - 1).trim();
+            }
+        }
+        return value;
     }
 
     private static int clamp(int value, int min, int max) {

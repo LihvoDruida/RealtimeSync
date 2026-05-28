@@ -111,7 +111,7 @@ public final class RealtimeWorldTime {
     }
 
     public static String dimensionId(ServerLevel level) {
-        Method method = DIMENSION_METHODS.computeIfAbsent(level.getClass(), type -> findZeroArgMethod(type, "dimension"));
+        Method method = DIMENSION_METHODS.computeIfAbsent(level.getClass(), type -> RealtimeReflection.findZeroArgMethod(type, "dimension"));
         Object dimension = method == null ? null : invoke(method, level);
         return normalizeDimensionId(dimension == null ? null : dimension.toString());
     }
@@ -190,7 +190,7 @@ public final class RealtimeWorldTime {
         }
 
         for (String name : new String[] {"getLevelData", "getData", "serverLevelData", "levelData"}) {
-            Method method = findZeroArgMethod(levelClass, name);
+            Method method = RealtimeReflection.findZeroArgMethod(levelClass, name);
             if (method != null) {
                 LEVEL_DATA_METHODS.put(levelClass, method);
                 return method;
@@ -201,14 +201,14 @@ public final class RealtimeWorldTime {
 
     private static Method findGetter(Class<?> type) {
         for (String name : new String[] {"getDayTime", "getGameTime", "dayTime", "timeOfDay"}) {
-            Method exact = findZeroArgMethod(type, name);
-            if (exact != null && isNumericReturn(exact)) {
+            Method exact = RealtimeReflection.findZeroArgMethod(type, name);
+            if (exact != null && RealtimeReflection.isNumeric(exact.getReturnType())) {
                 return exact;
             }
         }
 
         for (Method method : type.getMethods()) {
-            if (method.getParameterCount() != 0 || !isNumericReturn(method)) {
+            if (method.getParameterCount() != 0 || !RealtimeReflection.isNumeric(method.getReturnType())) {
                 continue;
             }
             String name = method.getName().toLowerCase(Locale.ROOT);
@@ -223,14 +223,14 @@ public final class RealtimeWorldTime {
 
     private static Method findSetter(Class<?> type) {
         for (String name : new String[] {"setDayTime", "setGameTime", "setTimeOfDay", "setClockTime"}) {
-            Method exact = findOneArgMethod(type, name);
-            if (exact != null && acceptsLongLike(exact.getParameterTypes()[0])) {
+            Method exact = RealtimeReflection.findOneArgMethod(type, name);
+            if (exact != null && RealtimeReflection.acceptsLongLike(exact.getParameterTypes()[0])) {
                 return exact;
             }
         }
 
         for (Method method : type.getMethods()) {
-            if (method.getParameterCount() != 1 || !acceptsLongLike(method.getParameterTypes()[0])) {
+            if (method.getParameterCount() != 1 || !RealtimeReflection.acceptsLongLike(method.getParameterTypes()[0])) {
                 continue;
             }
             String name = method.getName().toLowerCase(Locale.ROOT);
@@ -241,35 +241,6 @@ public final class RealtimeWorldTime {
         }
 
         return null;
-    }
-
-    private static Method findZeroArgMethod(Class<?> type, String name) {
-        for (Method method : type.getMethods()) {
-            if (method.getName().equals(name) && method.getParameterCount() == 0) {
-                method.setAccessible(true);
-                return method;
-            }
-        }
-        return null;
-    }
-
-    private static Method findOneArgMethod(Class<?> type, String name) {
-        for (Method method : type.getMethods()) {
-            if (method.getName().equals(name) && method.getParameterCount() == 1) {
-                method.setAccessible(true);
-                return method;
-            }
-        }
-        return null;
-    }
-
-    private static boolean isNumericReturn(Method method) {
-        Class<?> returnType = method.getReturnType();
-        return returnType == long.class || returnType == int.class || Number.class.isAssignableFrom(returnType);
-    }
-
-    private static boolean acceptsLongLike(Class<?> type) {
-        return type == long.class || type == Long.class || type == int.class || type == Integer.class;
     }
 
     private static Object invoke(Method method, Object target, Object... args) {

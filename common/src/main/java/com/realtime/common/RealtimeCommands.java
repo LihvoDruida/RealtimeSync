@@ -17,15 +17,15 @@ public final class RealtimeCommands {
     private static final ConcurrentMap<Class<?>, Method> GET_COMMANDS_METHODS = new ConcurrentHashMap<>();
     private static final ConcurrentMap<Class<?>, Method> CREATE_SOURCE_METHODS = new ConcurrentHashMap<>();
     private static final ConcurrentMap<Class<?>, Method> SUPPRESS_OUTPUT_METHODS = new ConcurrentHashMap<>();
-    private static final ConcurrentMap<Class<?>, Method> COMMAND_EXECUTE_METHODS = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<CommandExecuteKey, Method> COMMAND_EXECUTE_METHODS = new ConcurrentHashMap<>();
 
     private RealtimeCommands() {
     }
 
     public static boolean execute(MinecraftServer server, String command, RealtimeLog logger) {
         try {
-            Method getCommands = GET_COMMANDS_METHODS.computeIfAbsent(server.getClass(), type -> findZeroArgMethod(type, "getCommands"));
-            Method createSource = CREATE_SOURCE_METHODS.computeIfAbsent(server.getClass(), type -> findZeroArgMethod(type, "createCommandSourceStack"));
+            Method getCommands = GET_COMMANDS_METHODS.computeIfAbsent(server.getClass(), type -> RealtimeReflection.findZeroArgMethod(type, "getCommands"));
+            Method createSource = CREATE_SOURCE_METHODS.computeIfAbsent(server.getClass(), type -> RealtimeReflection.findZeroArgMethod(type, "createCommandSourceStack"));
             if (getCommands == null || createSource == null) {
                 logger.warn("Could not execute Minecraft command '{}': command API was not found for {}.", command, server.getClass().getName());
                 return false;
@@ -38,7 +38,8 @@ public final class RealtimeCommands {
                 logger.warn("Could not execute Minecraft command '{}': command dispatcher or source was null.", command);
                 return false;
             }
-            Method execute = COMMAND_EXECUTE_METHODS.computeIfAbsent(commands.getClass(), type -> findCommandExecuteMethod(type, suppressedSource.getClass()));
+            CommandExecuteKey executeKey = new CommandExecuteKey(commands.getClass(), suppressedSource.getClass());
+            Method execute = COMMAND_EXECUTE_METHODS.computeIfAbsent(executeKey, key -> findCommandExecuteMethod(key.commandsClass(), key.sourceClass()));
             if (execute == null) {
                 logger.warn("Could not execute Minecraft command '{}': no compatible execute method was found on {}.", command, commands.getClass().getName());
                 return false;
@@ -60,7 +61,7 @@ public final class RealtimeCommands {
             return null;
         }
 
-        Method method = SUPPRESS_OUTPUT_METHODS.computeIfAbsent(source.getClass(), type -> findZeroArgMethod(type, "withSuppressedOutput"));
+        Method method = SUPPRESS_OUTPUT_METHODS.computeIfAbsent(source.getClass(), type -> RealtimeReflection.findZeroArgMethod(type, "withSuppressedOutput"));
         if (method == null) {
             return source;
         }
@@ -115,13 +116,6 @@ public final class RealtimeCommands {
         return null;
     }
 
-    private static Method findZeroArgMethod(Class<?> type, String name) {
-        for (Method method : type.getMethods()) {
-            if (method.getName().equals(name) && method.getParameterCount() == 0) {
-                method.setAccessible(true);
-                return method;
-            }
-        }
-        return null;
+    private record CommandExecuteKey(Class<?> commandsClass, Class<?> sourceClass) {
     }
 }

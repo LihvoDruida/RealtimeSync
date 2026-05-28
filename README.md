@@ -80,7 +80,7 @@ debugLogging=false
 | `syncAllWorlds` | `false` | Syncs every loaded dimension only when `syncDimensions` is empty and this is `true`. The realistic default is Overworld-only. |
 | `syncDimensions` | `minecraft:overworld` | Comma-separated allowlist of dimensions to sync. Takes priority over `syncAllWorlds`. Default keeps realistic sky movement only in the Overworld. |
 | `ignoredDimensions` | empty | Comma-separated denylist excluded from time sync. Useful for modded/custom dimensions. |
-| `syncMode` | `smooth` | `instant` jumps directly to the target time. `smooth` gradually catches up and avoids visible sun/moon jumps. |
+| `syncMode` | `smooth` | `instant` jumps directly to the target time. `smooth` gradually catches up and avoids visible sun/moon jumps. This affects real-clock sync only; `customDayLengthMinutes > 0` uses its own direct wall-clock timer. |
 | `maxSmoothStepTicks` | `12` | Hard cap for Minecraft ticks changed per sync when `syncMode=smooth`. Lower is smoother; higher catches up faster. |
 | `smoothSnapThresholdTicks` | `2` | If the current time is already this close to the target, snap exactly to prevent tiny jitter. |
 | `smoothCatchupDivisor` | `240` | Adaptive catch-up softness. Higher values are gentler; lower values catch up faster. |
@@ -88,11 +88,12 @@ debugLogging=false
 | `overrideSleepTime` | `false` | Forces sync even while players are sleeping. Overrides `respectSleep`. |
 | `updateInterval` | `20` | Ticks between syncs. `20` ticks = 1 second. The realistic-smooth profile updates once per second. |
 | `offsetHours` | `0` | Shifts real-time sync by `-23..23` hours. |
-| `customDayLengthMinutes` | `0` | `0` means real clock sync. Values above `0` set a custom Minecraft day length. |
+| `customDayLengthMinutes` | `0` | `0` means real clock sync. Values above `0` set a custom Minecraft day length in real minutes, based on wall-clock elapsed time instead of server TPS. |
 | `debugLogging` | `false` | Enables verbose sync logs. |
 
 > Need a 40-minute Minecraft day? Set `customDayLengthMinutes=40` and keep `updateInterval=20`.
-> Do not use `updateInterval=40` for this; that only changes how often the mod updates the world time.
+> Do not use `updateInterval=40` for this; that only changes how often the mod applies the calculated time.
+> In custom day-length mode, `syncMode=smooth` is ignored on purpose because the custom timer is already smooth.
 
 See also: `docs/CONFIG_PRESETS.md` for ready-made realistic, ultra-smooth and fast-catch-up presets.
 

@@ -57,6 +57,8 @@ customDayLengthMinutes=40
 ```
 
 `updateInterval` is not the day length. It is only the sync frequency in Minecraft ticks.
+The custom day timer uses real elapsed wall-clock time, so it does not slow down when TPS drops.
+`syncMode` is intentionally ignored in this mode.
 
 ## Exact clock / no smoothing
 

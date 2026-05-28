@@ -7,3 +7,9 @@
 # These are Windows script files and should use crlf
 *.bat           text eol=crlf
 
+
+# CI scripts and workflow files must stay LF for Linux runners
+/scripts/*.sh  text eol=lf
+/scripts/*.py  text eol=lf
+/.github/workflows/*.yml text eol=lf
+/.github/workflows/*.yaml text eol=lf

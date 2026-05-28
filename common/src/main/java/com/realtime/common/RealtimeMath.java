@@ -1,5 +1,6 @@
 package com.realtime.common;
 
+import java.time.Clock;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -8,14 +9,25 @@ public final class RealtimeMath {
     public static final long TICKS_PER_DAY = 24000L;
     private static final long SECONDS_PER_DAY = 86400L;
     private static final long MINECRAFT_DAY_START_SECONDS = 6L * 60L * 60L;
+    private static final double NANOS_PER_SECOND = 1_000_000_000.0D;
+
+    private final Clock realtimeClock;
 
     private double customTicks = 0.0D;
-    private boolean customTicksInitialized = false;
+    private long lastCustomUpdateNanos = Long.MIN_VALUE;
+
+    public RealtimeMath() {
+        this(Clock.systemDefaultZone());
+    }
+
+    RealtimeMath(Clock realtimeClock) {
+        this.realtimeClock = realtimeClock;
+    }
 
     public long calculateRealtimeTicks(int offsetHours) {
-        customTicksInitialized = false;
+        resetCustomTicks();
 
-        LocalTime realTime = ZonedDateTime.now(ZoneId.systemDefault())
+        LocalTime realTime = ZonedDateTime.now(realtimeClock)
                 .plusHours(offsetHours)
                 .toLocalTime();
 
@@ -27,14 +39,28 @@ public final class RealtimeMath {
         return Math.floorMod(Math.round(secondsFromMinecraftMorning * (TICKS_PER_DAY / (double) SECONDS_PER_DAY)), TICKS_PER_DAY);
     }
 
-    public long calculateCustomTicks(long currentOverworldTime, int updateIntervalTicks, int customDayLengthMinutes) {
-        if (!customTicksInitialized) {
-            customTicks = Math.floorMod(currentOverworldTime, TICKS_PER_DAY);
-            customTicksInitialized = true;
+    public long calculateCustomTicks(long currentOverworldTime, int customDayLengthMinutes) {
+        return calculateCustomTicks(currentOverworldTime, customDayLengthMinutes, System.nanoTime());
+    }
+
+    long calculateCustomTicks(long currentOverworldTime, int customDayLengthMinutes, long nowNanos) {
+        if (customDayLengthMinutes <= 0) {
+            resetCustomTicks();
+            return Math.floorMod(currentOverworldTime, TICKS_PER_DAY);
         }
 
-        double ticksPerUpdate = updateIntervalTicks * TICKS_PER_DAY / (customDayLengthMinutes * 60.0D * 20.0D);
-        customTicks = (customTicks + ticksPerUpdate) % TICKS_PER_DAY;
+        if (lastCustomUpdateNanos == Long.MIN_VALUE) {
+            customTicks = Math.floorMod(currentOverworldTime, TICKS_PER_DAY);
+            lastCustomUpdateNanos = nowNanos;
+            return (long) customTicks;
+        }
+
+        long elapsedNanos = Math.max(0L, nowNanos - lastCustomUpdateNanos);
+        lastCustomUpdateNanos = nowNanos;
+
+        double secondsPerCustomDay = customDayLengthMinutes * 60.0D;
+        double ticksPerSecond = TICKS_PER_DAY / secondsPerCustomDay;
+        customTicks = wrapTicks(customTicks + (elapsedNanos / NANOS_PER_SECOND) * ticksPerSecond);
         return (long) customTicks;
     }
 
@@ -70,7 +96,12 @@ public final class RealtimeMath {
         return delta;
     }
 
+    private static double wrapTicks(double ticks) {
+        double wrapped = ticks % TICKS_PER_DAY;
+        return wrapped < 0.0D ? wrapped + TICKS_PER_DAY : wrapped;
+    }
+
     public void resetCustomTicks() {
-        customTicksInitialized = false;
+        lastCustomUpdateNanos = Long.MIN_VALUE;
     }
 }
