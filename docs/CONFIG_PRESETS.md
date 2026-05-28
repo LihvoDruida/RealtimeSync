@@ -46,6 +46,18 @@ smoothSnapThresholdTicks=2
 smoothCatchupDivisor=120
 ```
 
+## Custom 40-minute Minecraft day
+
+Use when you want the Minecraft day/night cycle to keep moving independently from the real clock.
+
+```properties
+forceDaylightCycleOff=true
+updateInterval=20
+customDayLengthMinutes=40
+```
+
+`updateInterval` is not the day length. It is only the sync frequency in Minecraft ticks.
+
 ## Exact clock / no smoothing
 
 Use only when exact matching matters more than visual movement.

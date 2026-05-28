@@ -91,6 +91,9 @@ debugLogging=false
 | `customDayLengthMinutes` | `0` | `0` means real clock sync. Values above `0` set a custom Minecraft day length. |
 | `debugLogging` | `false` | Enables verbose sync logs. |
 
+> Need a 40-minute Minecraft day? Set `customDayLengthMinutes=40` and keep `updateInterval=20`.
+> Do not use `updateInterval=40` for this; that only changes how often the mod updates the world time.
+
 See also: `docs/CONFIG_PRESETS.md` for ready-made realistic, ultra-smooth and fast-catch-up presets.
 
 ### Smooth realistic sync

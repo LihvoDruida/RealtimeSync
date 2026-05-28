@@ -104,11 +104,12 @@ public final class RealtimeController {
         }
 
         try {
-            long targetTicks = config.customDayLengthMinutes > 0
+            boolean customDayLengthMode = config.customDayLengthMinutes > 0;
+            long targetTicks = customDayLengthMode
                     ? timeMath.calculateCustomTicks(readOverworldTime(server), config.updateInterval, config.customDayLengthMinutes)
                     : timeMath.calculateRealtimeTicks(config.offsetHours);
 
-            int syncedWorlds = applyTime(server, targetTicks);
+            int syncedWorlds = applyTime(server, targetTicks, customDayLengthMode);
 
             if (config.debugLogging) {
                 logger.info("Synced {} world(s) toward {} ticks. Mode: {}, syncMode: {}.",
@@ -126,7 +127,7 @@ public final class RealtimeController {
         return RealtimeWorldTime.readOverworldTime(server);
     }
 
-    private int applyTime(MinecraftServer server, long targetTicks) {
+    private int applyTime(MinecraftServer server, long targetTicks, boolean customDayLengthMode) {
         int syncedWorlds = 0;
         Set<String> sleepingDimensions = sleepingDimensionIds(server);
         boolean skippedForSleep = false;
@@ -142,7 +143,10 @@ public final class RealtimeController {
                 continue;
             }
 
-            long ticksToApply = config.isSmoothSyncMode()
+            // customDayLengthMinutes already produces a smooth, deterministic clock.
+            // Applying realtime catch-up smoothing on top of it changes the requested
+            // day length and can make short/custom days appear almost frozen.
+            long ticksToApply = !customDayLengthMode && config.isSmoothSyncMode()
                     ? timeMath.calculateSmoothTicks(
                             RealtimeWorldTime.readDayTimeOrFallback(level, targetTicks),
                             targetTicks,

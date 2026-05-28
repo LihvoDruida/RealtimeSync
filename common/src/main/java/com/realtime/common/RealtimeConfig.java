@@ -78,6 +78,7 @@ public final class RealtimeConfig {
         config.updateInterval = readInt(properties, "updateInterval", config.updateInterval, logger);
         config.offsetHours = readInt(properties, "offsetHours", config.offsetHours, logger);
         config.customDayLengthMinutes = readInt(properties, "customDayLengthMinutes", config.customDayLengthMinutes, logger);
+        config.customDayLengthMinutes = readCustomDayLengthAlias(properties, config.customDayLengthMinutes, logger);
         config.debugLogging = readBoolean(properties, "debugLogging", config.debugLogging, logger);
         config.validate(logger);
 
@@ -271,6 +272,24 @@ public final class RealtimeConfig {
             logger.warn("Invalid integer config value {}={}. Using {}.", key, rawValue, fallback);
             return fallback;
         }
+    }
+
+    private static int readCustomDayLengthAlias(Properties properties, int fallback, RealtimeLog logger) {
+        if (properties.containsKey("customDayLengthMinutes")) {
+            return fallback;
+        }
+
+        for (String alias : new String[] {"realTimeMinutes", "dayLengthMinutes", "minecraftDayLengthMinutes"}) {
+            String rawValue = properties.getProperty(alias);
+            if (rawValue == null || rawValue.isBlank()) {
+                continue;
+            }
+
+            logger.warn("Config key {} is deprecated/ambiguous. Please use customDayLengthMinutes={} instead.", alias, rawValue.trim());
+            return readInt(properties, alias, fallback, logger);
+        }
+
+        return fallback;
     }
 
     private static String readString(Properties properties, String key, String fallback) {
