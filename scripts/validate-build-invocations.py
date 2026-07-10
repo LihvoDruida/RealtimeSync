@@ -43,6 +43,8 @@ def main() -> int:
         fail("build.gradle must support an explicit -PmodVersion override")
     if "0.0.0-dev+${revision ?: 'local'}" not in build_gradle:
         fail("local builds must not publish the ambiguous plain 0.0.0-dev version")
+    if "ext.resourceExpansionValues" not in build_gradle or "values.put('minecraft_version'" not in build_gradle:
+        fail("build.gradle must provide canonical common resource expansion values")
 
     for loader, task in LOADERS.items():
         if f"loaderTaskOrSkip('{task}'" not in build_gradle:
@@ -73,14 +75,38 @@ def main() -> int:
 
     require("common/src/main/resources/realtime-build.properties", "version=${version}", "embedded build version")
     require("common/src/main/resources/realtime-build.properties", "minecraft=${minecraft_version}", "embedded Minecraft version")
+    loader_labels = {
+        "fabric": "fabric",
+        "quilt": "quilt-compatible",
+        "forge": "forge",
+        "neoforge": "neoforge",
+    }
     for loader in LOADERS:
         require(f"{loader}/build.gradle", "filesMatching('realtime-build.properties')", "build metadata expansion")
+        require(
+            f"{loader}/build.gradle",
+            f"resourceExpansionValues('{loader_labels[loader]}'",
+            "canonical resource expansion map",
+        )
 
     workflow = (ROOT / ".github/workflows/package.yml").read_text(encoding="utf-8")
     if '"-PmcProfile=${{ steps.versions.outputs.mc_profile }}"' not in workflow:
         fail("CI must pass mcProfile as one quoted argument")
     if '"-PtargetLoader=${{ steps.versions.outputs.loader }}"' not in workflow:
         fail("CI must pass targetLoader as one quoted argument")
+    if '"-PmodVersion=${{ steps.tag_version.outputs.mod_version }}"' not in workflow:
+        fail("CI must pass the tag version directly to Gradle")
+    if 'sed -i "s/^mod_version=' in workflow:
+        fail("CI must not rewrite gradle.properties to propagate the release version")
+    if "validate-resource-expansion.py" not in workflow:
+        fail("CI must run resource expansion validation before the build matrix")
+    require(
+        "scripts/ci-read-profile.sh",
+        'REQUESTED_MOD_VERSION="${3:-${MOD_VERSION:-}}"',
+        "explicit CI release version input",
+    )
+    require("scripts/ci-read-profile.sh", "tr -d '\\r'", "CRLF-safe property parsing")
+    require("scripts/build.sh", "true\\r?$", "CRLF-safe loader switch parsing")
 
     profiles = sorted(path.stem for path in (ROOT / "buildProfiles").glob("*.properties"))
     expected = ["1.21"] + [f"1.21.{number}" for number in range(1, 12)]

@@ -11,14 +11,12 @@ if (!rootProject.ext.isLoaderEnabled('quilt')) {
 apply plugin: 'net.fabricmc.fabric-loom-remap'
 
 def archiveBaseName = "${archives_base_name}-quilt-${minecraft_version}"
-def resourceValues = [
-        version: version.toString(),
-        loader: 'quilt-compatible',
-        loader_version: loader_version.toString(),
-        fabric_version: fabric_version.toString(),
-        minecraft_version_range_fabric: minecraft_version_range_fabric.toString(),
-        java_version: java_version.toString()
-]
+def resourceValues = rootProject.ext.resourceExpansionValues('quilt-compatible', [
+        loader_version: loader_version,
+        fabric_version: fabric_version,
+        minecraft_version_range_fabric: minecraft_version_range_fabric,
+        java_version: java_version
+])
 def licenseArchiveName = "LICENSE_${archiveBaseName}"
 
 base {

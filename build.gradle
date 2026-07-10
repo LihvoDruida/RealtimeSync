@@ -155,6 +155,25 @@ def resolvedModVersion = resolveModVersion()
 minecraftProfileProperties.setProperty('mod_version', resolvedModVersion.version.toString())
 minecraftProfileProperties.setProperty('mod_version_source', resolvedModVersion.source.toString())
 
+// Every loader expands common resources such as realtime-build.properties.
+// Keep the shared placeholders in one canonical map so a loader-specific
+// processResources block cannot accidentally omit minecraft_version again.
+ext.resourceExpansionValues = { String loaderName, Map extraValues = [:] ->
+    LinkedHashMap<String, String> values = new LinkedHashMap<>()
+    values.put('version', rootProject.ext.mod_version.toString())
+    values.put('minecraft_version', rootProject.ext.minecraft_version.toString())
+    values.put('minecraft_profile', rootProject.ext.mcProfile.toString())
+    values.put('loader', loaderName)
+
+    extraValues.each { key, value ->
+        if (value == null) {
+            throw new GradleException("Resource expansion value '${key}' for loader '${loaderName}' is null.")
+        }
+        values.put(key.toString(), value.toString())
+    }
+    return java.util.Collections.unmodifiableMap(values)
+}
+
 allprojects {
     minecraftProfileProperties.each { key, value ->
         extensions.extraProperties.set(key.toString(), value.toString())

@@ -88,6 +88,33 @@ def validate_mods_toml(jar: zipfile.ZipFile, path: str, platform_mod_id: str, mi
         assert_contains(text, f'versionRange="[21.{expected_minor},)"', path)
 
 
+
+def validate_build_metadata(jar: zipfile.ZipFile, loader: str, minecraft_version: str, mod_version: str) -> None:
+    path = "realtime-build.properties"
+    text = read_text(jar, path)
+    assert_no_placeholders(text, path)
+
+    values: dict[str, str] = {}
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            fail(f"Invalid build metadata line in {path}: {raw_line!r}")
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip()
+
+    expected_loader = "quilt-compatible" if loader == "quilt" else loader
+    expected = {
+        "version": mod_version,
+        "minecraft": minecraft_version,
+        "loader": expected_loader,
+    }
+    for key, expected_value in expected.items():
+        actual = values.get(key)
+        if actual != expected_value:
+            fail(f"{path} has {key}={actual!r}, expected {expected_value!r}")
+
 def validate_common_entries(jar: zipfile.ZipFile, loader: str, jar_path: Path) -> None:
     names = set(jar.namelist())
     if "assets/realtime/icon.png" not in names:
@@ -146,6 +173,7 @@ def main() -> None:
     try:
         with zipfile.ZipFile(args.jar) as jar:
             validate_common_entries(jar, args.loader, args.jar)
+            validate_build_metadata(jar, args.loader, args.minecraft_version, args.mod_version)
             if args.loader in {"fabric", "quilt"}:
                 validate_fabric_like(jar, args.loader, args.minecraft_version, args.mod_version)
             elif args.loader == "forge":

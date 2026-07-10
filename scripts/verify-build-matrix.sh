@@ -25,12 +25,14 @@ fail() {
 [[ -s config/build-compatibility.lock.json ]] || fail "Missing config/build-compatibility.lock.json"
 python3 scripts/validate-build-profiles.py
 python3 scripts/validate-entrypoints.py
+python3 scripts/validate-resource-expansion.py
 python3 scripts/validate-dependency-artifacts.py
 python3 scripts/validate-build-invocations.py
 python3 -B -m py_compile \
   scripts/generate-ci-matrix.py \
   scripts/validate-build-profiles.py \
   scripts/validate-entrypoints.py \
+  scripts/validate-resource-expansion.py \
   scripts/validate-dependency-artifacts.py \
   scripts/validate-jar-metadata.py \
   scripts/check-ci-matrix.py \
@@ -62,6 +64,7 @@ grep -q "generate-ci-matrix.py --github-output" .github/workflows/package.yml ||
 grep -q "fromJson(needs.prepare-matrix.outputs.build_matrix)" .github/workflows/package.yml || fail "Workflow must consume generated matrix"
 grep -q "validate-source-tree.py" .github/workflows/package.yml || fail "Workflow must validate source cleanliness"
 grep -q "run-core-tests.sh" .github/workflows/package.yml || fail "Workflow must run core unit tests"
+grep -q "validate-resource-expansion.py" .github/workflows/package.yml || fail "Workflow must validate Gradle resource template expansion"
 grep -q "fail-mode: fail" .github/workflows/package.yml || fail "CurseForge publication failures must fail visibly"
 if grep -q "continue-on-error: true" .github/workflows/package.yml; then
   fail "Release publication must not hide failures with continue-on-error"

@@ -212,6 +212,8 @@ These commands are also valid:
 
 Do not omit `targetLoader` in automation. A single-loader task can infer it, but setting it explicitly prevents unrelated loader plugins and dependencies from being configured.
 
+All loader modules obtain common resource placeholders (`version`, `minecraft_version`, `minecraft_profile`, and `loader`) from one root Gradle map. This prevents `processResources` failures where one loader forgets a key required by `realtime-build.properties`.
+
 ### Linux/macOS
 
 ```bash
@@ -305,7 +307,7 @@ mc_profile x loader
 
 That means Fabric, Quilt, Forge and NeoForge are isolated per Minecraft version. A broken loader no longer hides which target failed, and disabled targets such as Forge `1.21.2` are skipped before loader-specific dependencies are resolved.
 
-The tag is the release version source. The workflow fails on non-tag refs instead of producing `0.0.0-dev` artifacts.
+The tag is the release version source. The workflow passes it directly through `-PmodVersion`; it does not rewrite `gradle.properties`. Before the matrix starts, CI validates resource-template expansion for every enabled profile/loader combination. The workflow fails on non-tag refs instead of producing `0.0.0-dev` artifacts.
 
 Release example:
 

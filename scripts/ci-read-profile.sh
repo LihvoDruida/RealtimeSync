@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROFILE="${1:?Usage: ci-read-profile.sh <mc_profile> <loader>}"
-LOADER="${2:?Usage: ci-read-profile.sh <mc_profile> <loader>}"
+PROFILE="${1:?Usage: ci-read-profile.sh <mc_profile> <loader> [mod_version]}"
+LOADER="${2:?Usage: ci-read-profile.sh <mc_profile> <loader> [mod_version]}"
+REQUESTED_MOD_VERSION="${3:-${MOD_VERSION:-}}"
 PROFILE_FILE="buildProfiles/${PROFILE}.properties"
 
 fail() {
@@ -14,12 +15,12 @@ fail() {
 
 read_profile_prop() {
   local key="$1"
-  grep -E "^${key}=" "${PROFILE_FILE}" | tail -n 1 | cut -d'=' -f2-
+  grep -E "^${key}=" "${PROFILE_FILE}" | tail -n 1 | cut -d'=' -f2- | tr -d '\r'
 }
 
 read_gradle_prop() {
   local key="$1"
-  grep -E "^${key}=" gradle.properties | tail -n 1 | cut -d'=' -f2-
+  grep -E "^${key}=" gradle.properties | tail -n 1 | cut -d'=' -f2- | tr -d '\r'
 }
 
 case "${LOADER}" in
@@ -60,19 +61,20 @@ MC_VERSION="$(read_profile_prop minecraft_version)"
 MC_LABEL="$(read_profile_prop minecraft_compat_label)"
 JAVA_VERSION="$(read_profile_prop java_version)"
 CURSEFORGE_JAVA="$(read_profile_prop curseforge_java_versions)"
-MOD_VERSION="$(read_gradle_prop mod_version)"
+DEFAULT_MOD_VERSION="$(read_gradle_prop mod_version)"
+RESOLVED_MOD_VERSION="${REQUESTED_MOD_VERSION:-${DEFAULT_MOD_VERSION}}"
 ENABLED="$(read_profile_prop "${ENABLE_KEY}")"
 
 [[ -n "${MC_VERSION}" ]] || fail "Profile ${PROFILE_FILE} missing minecraft_version"
 [[ -n "${MC_LABEL}" ]] || fail "Profile ${PROFILE_FILE} missing minecraft_compat_label"
 [[ -n "${JAVA_VERSION}" ]] || fail "Profile ${PROFILE_FILE} missing java_version"
 [[ -n "${CURSEFORGE_JAVA}" ]] || fail "Profile ${PROFILE_FILE} missing curseforge_java_versions"
-[[ -n "${MOD_VERSION}" ]] || fail "gradle.properties missing mod_version"
+[[ -n "${RESOLVED_MOD_VERSION}" ]] || fail "No mod version was provided and gradle.properties is missing mod_version"
 [[ "${ENABLED}" == "true" || "${ENABLED}" == "false" ]] || fail "${PROFILE_FILE} has invalid ${ENABLE_KEY}=${ENABLED}"
 
-JAR_NAME="realtime-sync-${LOADER}-${MC_VERSION}-${MOD_VERSION}.jar"
+JAR_NAME="realtime-sync-${LOADER}-${MC_VERSION}-${RESOLVED_MOD_VERSION}.jar"
 JAR_PATH="${MODULE_DIR}/build/libs/${JAR_NAME}"
-ARTIFACT_NAME="realtime-sync-${MOD_VERSION}-mc${MC_LABEL}-${LOADER}-jar"
+ARTIFACT_NAME="realtime-sync-${RESOLVED_MOD_VERSION}-mc${MC_LABEL}-${LOADER}-jar"
 
 write_output() {
   local key="$1"
@@ -93,7 +95,7 @@ write_output minecraft_version "${MC_VERSION}"
 write_output minecraft_compat_label "${MC_LABEL}"
 write_output java_version "${JAVA_VERSION}"
 write_output curseforge_java_versions "${CURSEFORGE_JAVA}"
-write_output mod_version "${MOD_VERSION}"
+write_output mod_version "${RESOLVED_MOD_VERSION}"
 write_output curseforge_game_versions "${MC_VERSION}"
 write_output enabled "${ENABLED}"
 write_output enable_key "${ENABLE_KEY}"

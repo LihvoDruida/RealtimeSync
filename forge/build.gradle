@@ -11,12 +11,10 @@ if (!rootProject.ext.isLoaderEnabled('forge')) {
 apply plugin: 'net.minecraftforge.gradle'
 
 def archiveBaseName = "${archives_base_name}-forge-${minecraft_version}"
-def resourceValues = [
-        version: version.toString(),
-        loader: 'forge',
-        forge_loader_version: forge_loader_version.toString(),
-        minecraft_version_range: minecraft_version_range_mods_toml.toString()
-]
+def resourceValues = rootProject.ext.resourceExpansionValues('forge', [
+        forge_loader_version: forge_loader_version,
+        minecraft_version_range: minecraft_version_range_mods_toml
+])
 def licenseArchiveName = "LICENSE_${archiveBaseName}"
 def implementationVersion = version.toString()
 def implementationTitle = name.toString()

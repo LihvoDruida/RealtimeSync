@@ -23,7 +23,7 @@ esac
 profile_file="buildProfiles/${profile}.properties"
 [[ -s "${profile_file}" ]] || { echo "ERROR: missing ${profile_file}" >&2; exit 2; }
 if [[ "${loader}" != all ]]; then
-  grep -qx "enable_${loader}=true" "${profile_file}" || {
+  grep -Eq "^enable_${loader}=true\r?$" "${profile_file}" || {
     echo "ERROR: loader '${loader}' is disabled for Minecraft ${profile}." >&2
     exit 2
   }

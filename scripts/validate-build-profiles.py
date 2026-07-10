@@ -168,7 +168,7 @@ def main() -> int:
         content = gradle_file.read_text(encoding="utf-8")
         if "inputs.properties resourceValues" not in content:
             fail(f"{gradle_file}: processResources must track immutable resourceValues")
-        if "fabric_version: fabric_version.toString()" not in content:
+        if "fabric_version: fabric_version" not in content:
             fail(f"{gradle_file}: resourceValues must expand fabric_version into fabric.mod.json")
 
     neoforge_toml = (ROOT / "neoforge/src/main/resources/META-INF/neoforge.mods.toml").read_text(encoding="utf-8")

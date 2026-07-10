@@ -48,6 +48,8 @@ Equivalent direct Gradle invocations:
 
 `targetLoader` isolates the relevant subproject. The settings script also infers it from a single `buildFabric`, `buildQuilt`, `buildForge`, or `buildNeoForge` task, but explicit selection is required in CI and recommended in local automation.
 
+`realtime-build.properties` is shared by every loader. Its base placeholders are supplied by the root `resourceExpansionValues(...)` helper, while each loader contributes only its own metadata ranges. Do not create independent base expansion maps in loader modules.
+
 ## Linux/macOS build commands
 
 ```bash
@@ -147,9 +149,12 @@ Run the same validation locally before pushing:
 
 ```bash
 python3 scripts/validate-build-profiles.py
+python3 scripts/validate-resource-expansion.py
 python3 scripts/validate-dependency-artifacts.py
 bash scripts/verify-build-matrix.sh
 ```
+
+Release jobs pass the tag-derived version directly as `-PmodVersion`. They must not modify `gradle.properties`, because mutating the checkout can desynchronize artifact names, embedded metadata, and publication jobs.
 
 Use this optional online probe when dependency coordinates change:
 

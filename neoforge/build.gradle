@@ -15,12 +15,10 @@ if (!hasProperty('neoforge_version_range') || neoforge_version_range.toString().
 }
 
 def archiveBaseName = "${archives_base_name}-neoforge-${minecraft_version}"
-def resourceValues = [
-        version: version.toString(),
-        loader: 'neoforge',
-        neoforge_version_range: neoforge_version_range.toString(),
-        minecraft_version_range: minecraft_version_range_mods_toml.toString()
-]
+def resourceValues = rootProject.ext.resourceExpansionValues('neoforge', [
+        neoforge_version_range: neoforge_version_range,
+        minecraft_version_range: minecraft_version_range_mods_toml
+])
 def licenseArchiveName = "LICENSE_${archiveBaseName}"
 
 base {
