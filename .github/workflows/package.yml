@@ -52,6 +52,10 @@ jobs:
         shell: bash
         run: python3 -B scripts/validate-entrypoints.py
 
+      - name: Validate Forge EventBus API boundaries
+        shell: bash
+        run: python3 -B scripts/validate-forge-event-api.py
+
       - name: Validate Gradle resource template expansion
         shell: bash
         run: python3 -B scripts/validate-resource-expansion.py

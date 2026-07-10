@@ -5,6 +5,7 @@
     "versioning": "Every active Minecraft profile pins exact loader dependency versions. Wildcards are forbidden for runtime build dependencies.",
     "java": "Minecraft 1.21.x profiles use Java 21.",
     "ci": "CI builds only combinations marked supported=true in this lock and mirrored by buildProfiles/*.properties.",
+    "forgeEvents": "Forge 1.21-1.21.5 uses EventBus 6 global registration; 1.21.6-1.21.8 uses EventBus 7 event-local BUS fields; 1.21.9-1.21.11 additionally uses record-style ServerTickEvent accessors.",
     "fabricMappings": "Minecraft 1.21.x Fabric/Quilt builds use fabric-loom-remap with explicit officialMojangMappings()."
   },
   "loaders": [
@@ -50,6 +51,7 @@
           "version": "51.0.33",
           "loaderRange": "[51,)",
           "artifact": "net.minecraftforge:forge:1.21-51.0.33",
+          "eventApi": "legacy",
           "notes": "ForgeGradle 7 userdev build."
         },
         "neoforge": {
@@ -91,6 +93,7 @@
           "version": "52.1.14",
           "loaderRange": "[52,)",
           "artifact": "net.minecraftforge:forge:1.21.1-52.1.14",
+          "eventApi": "legacy",
           "notes": "ForgeGradle 7 userdev build."
         },
         "neoforge": {
@@ -132,6 +135,7 @@
           "version": "unsupported",
           "loaderRange": "[53,)",
           "artifact": null,
+          "eventApi": "legacy",
           "notes": "Disabled: no official Forge artifact is available for this Minecraft version."
         },
         "neoforge": {
@@ -173,6 +177,7 @@
           "version": "53.1.10",
           "loaderRange": "[53,)",
           "artifact": "net.minecraftforge:forge:1.21.3-53.1.10",
+          "eventApi": "legacy",
           "notes": "ForgeGradle 7 userdev build."
         },
         "neoforge": {
@@ -214,6 +219,7 @@
           "version": "54.1.16",
           "loaderRange": "[54,)",
           "artifact": "net.minecraftforge:forge:1.21.4-54.1.16",
+          "eventApi": "legacy",
           "notes": "ForgeGradle 7 userdev build."
         },
         "neoforge": {
@@ -255,6 +261,7 @@
           "version": "55.1.10",
           "loaderRange": "[55,)",
           "artifact": "net.minecraftforge:forge:1.21.5-55.1.10",
+          "eventApi": "legacy",
           "notes": "ForgeGradle 7 userdev build."
         },
         "neoforge": {
@@ -296,6 +303,7 @@
           "version": "56.0.9",
           "loaderRange": "[56,)",
           "artifact": "net.minecraftforge:forge:1.21.6-56.0.9",
+          "eventApi": "eventbus7",
           "notes": "ForgeGradle 7 userdev build."
         },
         "neoforge": {
@@ -337,6 +345,7 @@
           "version": "57.0.3",
           "loaderRange": "[57,)",
           "artifact": "net.minecraftforge:forge:1.21.7-57.0.3",
+          "eventApi": "eventbus7",
           "notes": "ForgeGradle 7 userdev build."
         },
         "neoforge": {
@@ -378,6 +387,7 @@
           "version": "58.1.18",
           "loaderRange": "[58,)",
           "artifact": "net.minecraftforge:forge:1.21.8-58.1.18",
+          "eventApi": "eventbus7",
           "notes": "ForgeGradle 7 userdev build."
         },
         "neoforge": {
@@ -419,6 +429,7 @@
           "version": "59.0.5",
           "loaderRange": "[59,)",
           "artifact": "net.minecraftforge:forge:1.21.9-59.0.5",
+          "eventApi": "record-events",
           "notes": "ForgeGradle 7 userdev build."
         },
         "neoforge": {
@@ -460,6 +471,7 @@
           "version": "60.1.0",
           "loaderRange": "[60,)",
           "artifact": "net.minecraftforge:forge:1.21.10-60.1.0",
+          "eventApi": "record-events",
           "notes": "Forge 1.21.10 intentionally uses recommended 60.1.0; latest 60.1.9 can fail ForgeGradle Mavenizer on hosted runners."
         },
         "neoforge": {
@@ -501,6 +513,7 @@
           "version": "61.1.5",
           "loaderRange": "[61,)",
           "artifact": "net.minecraftforge:forge:1.21.11-61.1.5",
+          "eventApi": "record-events",
           "notes": "ForgeGradle 7 userdev build."
         },
         "neoforge": {

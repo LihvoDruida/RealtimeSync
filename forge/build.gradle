@@ -23,7 +23,14 @@ base {
     archivesName = archiveBaseName
 }
 
+def forgeEventApi = rootProject.ext.forge_event_api.toString()
+def forgeEntrypointSource = rootProject.file("forge/src/${forgeEventApi}/java")
+if (!forgeEntrypointSource.isDirectory()) {
+    throw new GradleException("Missing Forge event API source set '${forgeEventApi}' at ${forgeEntrypointSource}.")
+}
+
 sourceSets.main.java.srcDir(rootProject.file('common/src/main/java'))
+sourceSets.main.java.srcDir(forgeEntrypointSource)
 sourceSets.main.resources.srcDir(rootProject.file('common/src/main/resources'))
 
 repositories {
@@ -40,6 +47,9 @@ minecraft {
             workingDir.convention(layout.projectDirectory.dir('run'))
             systemProperty 'forge.logging.markers', 'REGISTRIES'
             systemProperty 'forge.logging.console.level', 'info'
+            if (forgeEventApi != 'legacy') {
+                systemProperty 'eventbus.api.strictRuntimeChecks', 'true'
+            }
         }
         register('client')
         register('server') { args '--nogui' }

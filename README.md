@@ -30,6 +30,14 @@ Do **not** upload one universal jar for every loader. Publish the correct jar fo
 
 `buildProfiles/1.21.2.properties` disables Forge with `enable_forge=false`, because there is no matching official Forge `1.21.2` artifact in the normal Forge downloads/Maven line. Fabric, Quilt-compatible and NeoForge builds remain enabled for `1.21.2`.
 
+Forge event registration changes inside the 1.21.x line, so the build profile also selects `forge_event_api`:
+
+- `legacy` for Minecraft 1.21–1.21.5: `MinecraftForge.EVENT_BUS` and `getServer()`;
+- `eventbus7` for Minecraft 1.21.6–1.21.8: event-local `EventName.BUS` fields and `getServer()`;
+- `record-events` for Minecraft 1.21.9–1.21.11: event-local buses and the record accessor `ServerTickEvent.Post.server()`.
+
+Only the matching `forge/src/<forge_event_api>/java` entrypoint is compiled for a profile.
+
 ## Features
 
 - Server-side only; clients do not need the mod installed.
@@ -141,7 +149,7 @@ Startup diagnostics include the embedded mod version, Minecraft profile, loader,
 Loader entrypoints are deliberately thin:
 
 - Fabric/Quilt-compatible builds use `SERVER_STARTED`, `END_SERVER_TICK`, and `SERVER_STOPPED` lifecycle events.
-- Forge uses the official post-server-tick event; there is no 50 ms background scheduler.
+- Forge uses a build-profile-selected lifecycle entrypoint for the EventBus 6, EventBus 7 class-event, or EventBus 7 record-event API boundary; there is no 50 ms background scheduler.
 - NeoForge uses one `ServerTickEvent.Post` per server tick, not one level event per dimension.
 - `RealtimeController` owns cadence, sleep suspension, config reload, persistence, and dimension iteration.
 - `ProfileDaylightRuleAccess` is selected at build time: legacy API for 1.21–1.21.10 and registry-backed `GameRules.ADVANCE_TIME` for 1.21.11.
@@ -211,8 +219,6 @@ These commands are also valid:
 ```
 
 Do not omit `targetLoader` in automation. A single-loader task can infer it, but setting it explicitly prevents unrelated loader plugins and dependencies from being configured.
-
-All loader modules obtain common resource placeholders (`version`, `minecraft_version`, `minecraft_profile`, and `loader`) from one root Gradle map. This prevents `processResources` failures where one loader forgets a key required by `realtime-build.properties`.
 
 ### Linux/macOS
 
@@ -307,7 +313,7 @@ mc_profile x loader
 
 That means Fabric, Quilt, Forge and NeoForge are isolated per Minecraft version. A broken loader no longer hides which target failed, and disabled targets such as Forge `1.21.2` are skipped before loader-specific dependencies are resolved.
 
-The tag is the release version source. The workflow passes it directly through `-PmodVersion`; it does not rewrite `gradle.properties`. Before the matrix starts, CI validates resource-template expansion for every enabled profile/loader combination. The workflow fails on non-tag refs instead of producing `0.0.0-dev` artifacts.
+The tag is the release version source. The workflow fails on non-tag refs instead of producing `0.0.0-dev` artifacts.
 
 Release example:
 

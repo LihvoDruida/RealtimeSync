@@ -47,17 +47,53 @@ def validate_fabric_like() -> None:
 
 
 def validate_forge() -> None:
-    path = "forge/src/main/java/com/realtime/forge/RealtimeForge.java"
-    java = read(path)
-    require(java, "@Mod(RealtimeConstants.MOD_ID)", path)
-    require(java, "MinecraftForge.EVENT_BUS.addListener(this::onServerStarted)", path)
-    require(java, "MinecraftForge.EVENT_BUS.addListener(this::onServerTick)", path)
-    require(java, "MinecraftForge.EVENT_BUS.addListener(this::onServerStopped)", path)
-    require(java, "TickEvent.ServerTickEvent.Post", path)
-    forbid(java, "ScheduledExecutorService", path)
-    forbid(java, "scheduleAtFixedRate", path)
-    forbid(java, "ServerLifecycleHooks.getCurrentServer", path)
-    forbid(java, "net.minecraft.client", path)
+    legacy_path = "forge/src/legacy/java/com/realtime/forge/RealtimeForge.java"
+    legacy = read(legacy_path)
+    require(legacy, "@Mod(RealtimeConstants.MOD_ID)", legacy_path)
+    require(legacy, "MinecraftForge.EVENT_BUS.addListener(this::onRegisterCommands)", legacy_path)
+    require(legacy, "MinecraftForge.EVENT_BUS.addListener(this::onServerStarted)", legacy_path)
+    require(legacy, "MinecraftForge.EVENT_BUS.addListener(this::onServerTick)", legacy_path)
+    require(legacy, "MinecraftForge.EVENT_BUS.addListener(this::onServerStopped)", legacy_path)
+    require(legacy, "controller.onServerTick(event.getServer())", legacy_path)
+
+    eventbus7_path = "forge/src/eventbus7/java/com/realtime/forge/RealtimeForge.java"
+    eventbus7 = read(eventbus7_path)
+    require(eventbus7, "@Mod(RealtimeConstants.MOD_ID)", eventbus7_path)
+    require(eventbus7, "RegisterCommandsEvent.BUS.addListener(this::onRegisterCommands)", eventbus7_path)
+    require(eventbus7, "ServerStartedEvent.BUS.addListener(this::onServerStarted)", eventbus7_path)
+    require(eventbus7, "TickEvent.ServerTickEvent.Post.BUS.addListener(this::onServerTick)", eventbus7_path)
+    require(eventbus7, "ServerStoppedEvent.BUS.addListener(this::onServerStopped)", eventbus7_path)
+    require(eventbus7, "controller.onServerTick(event.getServer())", eventbus7_path)
+    forbid(eventbus7, "MinecraftForge.EVENT_BUS", eventbus7_path)
+    forbid(eventbus7, "event.server()", eventbus7_path)
+
+    record_path = "forge/src/record-events/java/com/realtime/forge/RealtimeForge.java"
+    record = read(record_path)
+    require(record, "@Mod(RealtimeConstants.MOD_ID)", record_path)
+    require(record, "RegisterCommandsEvent.BUS.addListener(this::onRegisterCommands)", record_path)
+    require(record, "ServerStartedEvent.BUS.addListener(this::onServerStarted)", record_path)
+    require(record, "TickEvent.ServerTickEvent.Post.BUS.addListener(this::onServerTick)", record_path)
+    require(record, "ServerStoppedEvent.BUS.addListener(this::onServerStopped)", record_path)
+    require(record, "controller.onServerTick(event.server())", record_path)
+    forbid(record, "MinecraftForge.EVENT_BUS", record_path)
+    forbid(record, "controller.onServerTick(event.getServer())", record_path)
+
+    main_entrypoint = ROOT / "forge/src/main/java/com/realtime/forge/RealtimeForge.java"
+    if main_entrypoint.exists():
+        fail("Forge RealtimeForge.java must be profile-specific, not shared from forge/src/main/java")
+
+    for variant_path, java in ((legacy_path, legacy), (eventbus7_path, eventbus7), (record_path, record)):
+        require(java, "TickEvent.ServerTickEvent.Post", variant_path)
+        forbid(java, "ScheduledExecutorService", variant_path)
+        forbid(java, "scheduleAtFixedRate", variant_path)
+        forbid(java, "ServerLifecycleHooks.getCurrentServer", variant_path)
+        forbid(java, "net.minecraft.client", variant_path)
+
+    build_path = "forge/build.gradle"
+    build = read(build_path)
+    require(build, "rootProject.ext.forge_event_api", build_path)
+    require(build, 'forge/src/${forgeEventApi}/java', build_path)
+    require(build, "sourceSets.main.java.srcDir(forgeEntrypointSource)", build_path)
 
     meta_path = "forge/src/main/resources/META-INF/mods.toml"
     meta = read(meta_path)

@@ -26,8 +26,12 @@ The build profile, not runtime guessing, selects the GameRules implementation.
 ## Loader lifecycle
 
 - Fabric/Quilt-compatible: `SERVER_STARTED`, `END_SERVER_TICK`, `SERVER_STOPPED`.
-- Forge: official post-server-tick lifecycle; no executor or polling thread.
+- Forge 1.21–1.21.5: legacy global Forge event bus.
+- Forge 1.21.6–1.21.8: EventBus 7 event-local `BUS` fields with class-style tick accessors.
+- Forge 1.21.9–1.21.11: EventBus 7 event-local `BUS` fields with record-style `ServerTickEvent.Post.server()`.
 - NeoForge: one post-server-tick event; no per-level tick deduplication.
+
+The profile property `forge_event_api` selects exactly one Forge entrypoint source directory. Runtime reflection and background polling are forbidden for this boundary.
 
 Quilt is a separately named Fabric-compatible artifact. It is not described as a native Quilt implementation because there is no dedicated Quilt entrypoint/API integration.
 
@@ -41,6 +45,7 @@ When changing a loader dependency:
 
 ```bash
 python3 scripts/validate-build-profiles.py
+python3 scripts/validate-forge-event-api.py
 python3 scripts/validate-dependency-artifacts.py
 bash scripts/verify-build-matrix.sh
 ```

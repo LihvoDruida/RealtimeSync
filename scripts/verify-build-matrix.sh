@@ -32,6 +32,7 @@ cleanup_python_caches
 [[ -s config/build-compatibility.lock.json ]] || fail "Missing config/build-compatibility.lock.json"
 python3 -B scripts/validate-build-profiles.py
 python3 -B scripts/validate-entrypoints.py
+python3 -B scripts/validate-forge-event-api.py
 python3 -B scripts/validate-resource-expansion.py
 python3 -B scripts/validate-dependency-artifacts.py
 python3 -B scripts/validate-build-invocations.py
@@ -42,6 +43,7 @@ PYTHONPYCACHEPREFIX="${python_cache_dir}" python3 -m py_compile \
   scripts/generate-ci-matrix.py \
   scripts/validate-build-profiles.py \
   scripts/validate-entrypoints.py \
+  scripts/validate-forge-event-api.py \
   scripts/validate-resource-expansion.py \
   scripts/validate-dependency-artifacts.py \
   scripts/validate-jar-metadata.py \
@@ -94,6 +96,12 @@ fi
 if grep -RInE --include='*.java' 'ScheduledExecutorService|scheduleAtFixedRate' forge; then
   fail "Forge must use official server tick events, not a background scheduler"
 fi
+grep -q 'forge_event_api=legacy' buildProfiles/1.21.5.properties || fail "Forge 1.21.5 must use the legacy EventBus API"
+grep -q 'forge_event_api=eventbus7' buildProfiles/1.21.6.properties || fail "Forge 1.21.6 must use EventBus 7 event-local buses"
+grep -q 'forge_event_api=record-events' buildProfiles/1.21.9.properties || fail "Forge 1.21.9 must use record-style tick accessors"
+grep -q 'MinecraftForge.EVENT_BUS.addListener' forge/src/legacy/java/com/realtime/forge/RealtimeForge.java || fail "Legacy Forge entrypoint registration is missing"
+grep -q 'TickEvent.ServerTickEvent.Post.BUS.addListener' forge/src/eventbus7/java/com/realtime/forge/RealtimeForge.java || fail "Forge EventBus 7 entrypoint registration is missing"
+grep -q 'controller.onServerTick(event.server())' forge/src/record-events/java/com/realtime/forge/RealtimeForge.java || fail "Forge record event tick accessor is missing"
 if grep -RIn --include='*.java' 'LevelTickEvent' neoforge; then
   fail "NeoForge must use one ServerTickEvent per server tick"
 fi

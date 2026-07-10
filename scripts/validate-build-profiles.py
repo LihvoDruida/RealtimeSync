@@ -118,6 +118,21 @@ def main() -> int:
                 fail(f"{path}: enable_{loader}={value} disagrees with compatibility lock supported={supported}")
 
         forge = locked["loaders"]["forge"]
+        forge_event_api = require(props, path, "forge_event_api")
+        if forge_event_api not in {"legacy", "eventbus7", "record-events"}:
+            fail(f"{path}: forge_event_api must be legacy, eventbus7 or record-events")
+        if forge_event_api != forge.get("eventApi"):
+            fail(f"{path}: forge_event_api disagrees with compatibility lock")
+        expected_forge_event_api = (
+            "legacy" if profile in {"1.21", "1.21.1", "1.21.2", "1.21.3", "1.21.4", "1.21.5"}
+            else "eventbus7" if profile in {"1.21.6", "1.21.7", "1.21.8"}
+            else "record-events"
+        )
+        if forge_event_api != expected_forge_event_api:
+            fail(f"{path}: Forge event API boundary for {profile} must be {expected_forge_event_api}")
+        forge_entrypoint = ROOT / "forge" / "src" / forge_event_api / "java" / "com" / "realtime" / "forge" / "RealtimeForge.java"
+        if not forge_entrypoint.is_file():
+            fail(f"{path}: missing Forge entrypoint for forge_event_api={forge_event_api}: {forge_entrypoint}")
         if require(props, path, "forge_version") != forge.get("version"):
             fail(f"{path}: forge_version disagrees with compatibility lock")
         if require(props, path, "forge_loader_version") != forge.get("loaderRange"):
@@ -153,6 +168,8 @@ def main() -> int:
     baseline = lock["profiles"].get("1.21.5")
     if fallback.get("fabric_version") != baseline.get("fabricApi"):
         fail("gradle.properties fallback fabric_version must mirror buildProfiles/1.21.5.properties")
+    if fallback.get("forge_event_api") != baseline["loaders"]["forge"].get("eventApi"):
+        fail("gradle.properties fallback forge_event_api must mirror buildProfiles/1.21.5.properties")
     if fallback.get("neoforge_version") != baseline["loaders"]["neoforge"].get("version"):
         fail("gradle.properties fallback neoforge_version must mirror buildProfiles/1.21.5.properties")
     if fallback.get("neoforge_loader_version") != baseline["loaders"]["neoforge"].get("loaderRange"):

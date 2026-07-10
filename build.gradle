@@ -247,6 +247,7 @@ tasks.register('printBuildProfile') {
         println "fabric_loader_version=${rootProject.ext.loader_version}"
         println "fabric_version=${rootProject.ext.fabric_version}"
         println "forge_version=${rootProject.ext.forge_version}"
+        println "forge_event_api=${rootProject.ext.forge_event_api}"
         println "neoforge_version=${rootProject.ext.neoforge_version}"
         println "enable_fabric=${rootProject.ext.isLoaderEnabled('fabric')}"
         println "enable_quilt=${rootProject.ext.isLoaderEnabled('quilt')}"

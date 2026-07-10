@@ -11,8 +11,9 @@ The following old keys are still read but are deprecated:
 | `offsetHours=N` | `timeOffsetMinutes=N*60` |
 | `maxSmoothStepTicks=N` | Converted approximately to `smoothMaxCorrectionTicksPerSecond` using `updateInterval` |
 | `minutesPerMinecraftDay=N` | `customDayLengthMinutes=N` |
+| `zoneId=Europe/Kiev` | `zoneId=Europe/Kyiv` |
 
-The old file is not rewritten during a normal read. Save or regenerate the configuration to remove deprecated keys.
+After a successful read, deprecated keys and known timezone aliases are rewritten once to the canonical UTF-8 `realtime.properties` format using an atomic replacement. If the rewrite fails, the original file remains available and the migration is attempted again later.
 
 ## Legacy TOML
 

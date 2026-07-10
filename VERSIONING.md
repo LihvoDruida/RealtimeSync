@@ -127,6 +127,24 @@ Fabric API must be exact and must include the selected Minecraft suffix, for exa
 
 Fabric and Quilt builds on this branch always use `net.fabricmc.fabric-loom-remap` with `loom.officialMojangMappings()`. There is no `26.x` unobfuscated branch in `mc-1.21.x`.
 
+## Forge event API boundaries
+
+Forge changed its event system twice within the supported Minecraft 1.21.x line. Every profile therefore declares one explicit `forge_event_api` value:
+
+| Minecraft | `forge_event_api` | Registration | Server tick accessor |
+| --- | --- | --- | --- |
+| 1.21–1.21.5 | `legacy` | `MinecraftForge.EVENT_BUS.addListener(...)` | `event.getServer()` |
+| 1.21.6–1.21.8 | `eventbus7` | `EventName.BUS.addListener(...)` | `event.getServer()` |
+| 1.21.9–1.21.11 | `record-events` | `EventName.BUS.addListener(...)` | `event.server()` |
+
+`forge/build.gradle` compiles exactly one matching directory under `forge/src/<forge_event_api>/java`. Do not merge these entrypoints into one source file and do not solve the boundary with runtime reflection.
+
+Validate the boundary with:
+
+```bash
+python3 scripts/validate-forge-event-api.py
+```
+
 ## Forge 1.21.2
 
 Forge is intentionally disabled for `1.21.2` because the normal Forge artifact line does not provide a matching official Forge build for that Minecraft version. Fabric, Quilt-compatible and NeoForge remain enabled.
