@@ -8,6 +8,9 @@ param(
     [ValidateSet('fabric', 'quilt', 'forge', 'neoforge', 'all')]
     [string]$Loader = 'all',
 
+    [ValidatePattern('^[0-9A-Za-z][0-9A-Za-z._+-]*$')]
+    [string]$ModVersion = '',
+
     [switch]$NoClean,
     [switch]$Stacktrace,
     [switch]$RefreshDependencies,
@@ -49,9 +52,13 @@ $GradleArgs = @(
     "-PmcProfile=$Profile",
     "-PtargetLoader=$Loader"
 )
+if ($ModVersion) { $GradleArgs += "-PmodVersion=$ModVersion" }
 
 if ($PrintProfile) {
-    & .\gradlew.bat "-PmcProfile=$Profile" '-PtargetLoader=none' printBuildProfile
+    $ProfileArgs = @("-PmcProfile=$Profile", '-PtargetLoader=none')
+    if ($ModVersion) { $ProfileArgs += "-PmodVersion=$ModVersion" }
+    $ProfileArgs += 'printBuildProfile'
+    & .\gradlew.bat @ProfileArgs
     if ($LASTEXITCODE -ne 0) { throw "Gradle profile validation failed with exit code $LASTEXITCODE." }
 }
 if (-not $NoClean) { $GradleArgs += 'clean' }
@@ -59,6 +66,7 @@ $GradleArgs += $Task
 if ($Stacktrace) { $GradleArgs += '--stacktrace' }
 if ($RefreshDependencies) { $GradleArgs += '--refresh-dependencies' }
 
-Write-Host "Building Minecraft $Profile for loader '$Loader' using task '$Task'."
+$VersionLabel = if ($ModVersion) { " with version '$ModVersion'" } else { '' }
+Write-Host "Building Minecraft $Profile for loader '$Loader' using task '$Task'$VersionLabel."
 & .\gradlew.bat @GradleArgs
 if ($LASTEXITCODE -ne 0) { throw "Gradle build failed with exit code $LASTEXITCODE." }

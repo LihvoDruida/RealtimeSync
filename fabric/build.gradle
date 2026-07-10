@@ -13,6 +13,7 @@ apply plugin: 'net.fabricmc.fabric-loom-remap'
 def archiveBaseName = "${archives_base_name}-fabric-${minecraft_version}"
 def resourceValues = [
         version: version.toString(),
+        loader: 'fabric',
         loader_version: loader_version.toString(),
         fabric_version: fabric_version.toString(),
         minecraft_version_range_fabric: minecraft_version_range_fabric.toString(),
@@ -50,6 +51,9 @@ dependencies {
 tasks.named('processResources', ProcessResources) {
     inputs.properties resourceValues
     filesMatching('fabric.mod.json') {
+        expand(resourceValues)
+    }
+    filesMatching('realtime-build.properties') {
         expand(resourceValues)
     }
 }

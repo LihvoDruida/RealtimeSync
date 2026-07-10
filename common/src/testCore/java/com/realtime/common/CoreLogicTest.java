@@ -124,14 +124,22 @@ public final class CoreLogicTest {
                         + "enabled = true\n"
                         + "offsetHours = 2\n"
                         + "forceDaylightCycleOff = true\n"
+                        + "maxSmoothStepTicks = 12\n"
+                        + "updateInterval = 20\n"
+                        + "zoneId = \"Europe/Kiev\"\n"
                         + "syncDimensions = \"minecraft:overworld,example:moon\"\n",
                 StandardCharsets.UTF_8);
 
         RealtimeConfig migrated = RealtimeConfig.loadOrCreate(config, legacy, log);
         assertEquals(120L, migrated.timeOffsetMinutes, "offsetHours migration");
         assertEquals(RealtimeConfig.DAYLIGHT_POLICY_MANAGED, migrated.daylightRulePolicy, "gamerule policy migration");
+        assertEquals(12L, migrated.smoothMaxCorrectionTicksPerSecond, "legacy smooth step preserves one-second update behavior");
+        assertEquals("Europe/Kyiv", migrated.zoneId, "legacy timezone alias migration");
         assertTrue(Files.exists(legacy.resolveSibling("realtime.toml.bak")), "legacy backup created");
-        assertTrue(Files.readString(config, StandardCharsets.UTF_8).contains("timeOffsetMinutes=120"), "new UTF-8 config written");
+        String canonicalConfig = Files.readString(config, StandardCharsets.UTF_8);
+        assertTrue(canonicalConfig.contains("timeOffsetMinutes=120"), "new UTF-8 config written");
+        assertTrue(canonicalConfig.contains("zoneId=Europe/Kyiv"), "canonical timezone written");
+        assertTrue(!canonicalConfig.contains("Europe/Kiev"), "deprecated timezone alias removed");
         assertTrue(!Files.exists(config.resolveSibling("realtime.properties.tmp")), "atomic temp cleaned");
 
         Files.writeString(config, "zoneId=Not/A_Real_Zone\n", StandardCharsets.UTF_8);

@@ -45,6 +45,8 @@ public final class RealtimeController {
     private long lastProcessedServerTick = RealtimeServerState.UNKNOWN_TICK;
     private MinecraftServer activeServer;
     private boolean customClockInitialized;
+    private boolean noManagedDimensionsWarningShown;
+    private int lastActiveDimensionCount;
     private Instant lastSuccessfulUpdate;
     private Instant lastConfigReload;
 
@@ -62,8 +64,9 @@ public final class RealtimeController {
         this.legacyConfigPath = configDir.resolve("realtime.toml");
         this.statePath = configDir.resolve("realtime-state.properties");
         this.gameRules = new RealtimeGameRules(logger);
-        this.config = RealtimeConfig.loadOrCreate(configPath, legacyConfigPath, logger);
-        this.configFingerprint = fingerprint(configPath);
+        // Do not read or rewrite configuration from parallel mod-loading workers.
+        // The first real load is performed on the dedicated server thread.
+        this.config = RealtimeConfig.defaults(logger);
     }
 
     public Path configPath() {
@@ -82,7 +85,11 @@ public final class RealtimeController {
         initializeCustomClockIfNeeded(server);
         manageDaylightRules(server, true);
         syncServerTime(server);
-        logger.info("RealtimeSync started. gameruleAdapter={}, dimensionAdapter={}, commandPermissionAdapter={}, mode={}, zoneId={}, daylightRulePolicy={}, config={}",
+        RealtimeBuildInfo buildInfo = RealtimeBuildInfo.current();
+        logger.info("RealtimeSync started. version={}, minecraft={}, loader={}, gameruleAdapter={}, dimensionAdapter={}, commandPermissionAdapter={}, mode={}, zoneId={}, daylightRulePolicy={}, config={}",
+                buildInfo.version(),
+                buildInfo.minecraftVersion(),
+                buildInfo.loader(),
                 gameRules.adapterName(),
                 RealtimeWorldTime.dimensionAdapterName(),
                 RealtimeStatusCommand.permissionAdapterName(),
@@ -90,6 +97,7 @@ public final class RealtimeController {
                 config.resolvedZoneId().getId(),
                 config.daylightRulePolicy,
                 configPath.getFileName());
+        logInitialState(server);
     }
 
     public void onServerStopped(MinecraftServer server) {
@@ -174,6 +182,7 @@ public final class RealtimeController {
             long commonCustomTarget = customMode ? calculateCustomTarget(server) : 0L;
             long realtimeTimeOfDay = customMode ? 0L : timeMath.calculateRealtimeTimeOfDay(config.resolvedZoneId(), config.timeOffsetMinutes);
             long updateNanos = timeMath.nowNanos();
+            int managedWorlds = 0;
             int syncedWorlds = 0;
 
             for (ServerLevel level : server.getAllLevels()) {
@@ -181,6 +190,7 @@ public final class RealtimeController {
                 if (dimensionId == null || !shouldSyncLevel(dimensionId)) {
                     continue;
                 }
+                managedWorlds++;
                 if (sleepingDimensions.contains(dimensionId)) {
                     continue;
                 }
@@ -208,6 +218,15 @@ public final class RealtimeController {
                 }
             }
 
+            lastActiveDimensionCount = managedWorlds;
+            if (managedWorlds == 0) {
+                if (!noManagedDimensionsWarningShown) {
+                    noManagedDimensionsWarningShown = true;
+                    logger.warn("RealtimeSync found no managed dimensions. Check syncAllWorlds, syncDimensions and ignoredDimensions.");
+                }
+            } else {
+                noManagedDimensionsWarningShown = false;
+            }
             if (syncedWorlds > 0) {
                 lastSuccessfulUpdate = timeMath.now();
             }
@@ -399,6 +418,7 @@ public final class RealtimeController {
         smoothStates.clear();
         lastSmoothUpdateNanos.clear();
         largeJumpWarnings.clear();
+        noManagedDimensionsWarningShown = false;
         if (!force) {
             logger.info("RealtimeSync config reloaded successfully.");
         }
@@ -428,7 +448,10 @@ public final class RealtimeController {
             targetAbsolute = timeMath.resolveRealtimeAbsoluteTarget(currentAbsolute, targetTimeOfDay, config);
         }
 
-        lines.add("RealtimeSync status");
+        RealtimeBuildInfo buildInfo = RealtimeBuildInfo.current();
+        lines.add("RealtimeSync status version=" + buildInfo.version()
+                + ", minecraft=" + buildInfo.minecraftVersion()
+                + ", loader=" + buildInfo.loader());
         lines.add("enabled=" + config.enabled
                 + ", mode=" + (config.customDayLengthMinutes > 0 ? "custom-day-length" : config.syncMode)
                 + ", zoneId=" + config.resolvedZoneId().getId());
@@ -449,6 +472,41 @@ public final class RealtimeController {
         return List.copyOf(lines);
     }
 
+    private void logInitialState(MinecraftServer server) {
+        List<String> managedDimensions = new ArrayList<>();
+        ServerLevel reference = null;
+        for (ServerLevel level : server.getAllLevels()) {
+            String dimensionId = resolveManagedDimensionId(level);
+            if (dimensionId == null || !shouldSyncLevel(dimensionId)) {
+                continue;
+            }
+            managedDimensions.add(dimensionId);
+            if (reference == null || OVERWORLD_DIMENSION_ID.equals(dimensionId)) {
+                reference = level;
+            }
+        }
+        lastActiveDimensionCount = managedDimensions.size();
+        if (reference == null) {
+            logger.warn("RealtimeSync startup check found no managed dimensions. Check syncAllWorlds, syncDimensions and ignoredDimensions.");
+            noManagedDimensionsWarningShown = true;
+            return;
+        }
+
+        long currentAbsolute = RealtimeWorldTime.readDayTimeOrFallback(reference, 0L);
+        long targetAbsolute;
+        if (config.customDayLengthMinutes > 0) {
+            targetAbsolute = customClockInitialized ? (long) Math.floor(timeMath.customClockValue()) : currentAbsolute;
+        } else {
+            long targetTimeOfDay = timeMath.calculateRealtimeTimeOfDay(config.resolvedZoneId(), config.timeOffsetMinutes);
+            targetAbsolute = timeMath.resolveRealtimeAbsoluteTarget(currentAbsolute, targetTimeOfDay, config);
+        }
+        logger.info("RealtimeSync initial state: managedDimensions={}, currentAbsoluteDayTime={}, targetAbsoluteDayTime={}, gamerule={}.",
+                managedDimensions,
+                currentAbsolute,
+                targetAbsolute,
+                gameRules.describeState(reference));
+    }
+
     private static String formatInstant(Instant instant) {
         return instant == null ? "never" : instant.toString();
     }
@@ -461,6 +519,8 @@ public final class RealtimeController {
         rulesSuspendedForSleep = false;
         lastProcessedServerTick = RealtimeServerState.UNKNOWN_TICK;
         customClockInitialized = false;
+        noManagedDimensionsWarningShown = false;
+        lastActiveDimensionCount = 0;
         lastSuccessfulUpdate = null;
         if (clearGameRuleOwnership) {
             lastConfigReload = null;
@@ -495,7 +555,7 @@ public final class RealtimeController {
                 performanceSkippedUpdates,
                 averageMicros,
                 performanceMaxNanos / 1_000L,
-                smoothStates.size(),
+                lastActiveDimensionCount,
                 performanceConfigReloads,
                 performanceGameruleChecks);
         resetPerformanceWindow();

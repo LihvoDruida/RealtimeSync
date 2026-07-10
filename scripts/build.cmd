@@ -6,6 +6,7 @@ pushd "%ROOT%" >NUL || exit /b 2
 
 set "PROFILE=%~1"
 set "LOADER=%~2"
+set "MOD_VERSION=%~3"
 if "%PROFILE%"=="" set "PROFILE=1.21.5"
 if "%LOADER%"=="" set "LOADER=all"
 
@@ -27,7 +28,11 @@ if not exist "buildProfiles\%PROFILE%.properties" (
   exit /b 2
 )
 
-call gradlew.bat "-PmcProfile=%PROFILE%" "-PtargetLoader=%LOADER%" clean %TASK%
+if "%MOD_VERSION%"=="" (
+  call gradlew.bat "-PmcProfile=%PROFILE%" "-PtargetLoader=%LOADER%" clean %TASK%
+) else (
+  call gradlew.bat "-PmcProfile=%PROFILE%" "-PtargetLoader=%LOADER%" "-PmodVersion=%MOD_VERSION%" clean %TASK%
+)
 set "EXIT_CODE=%ERRORLEVEL%"
 popd
 exit /b %EXIT_CODE%

@@ -28,6 +28,14 @@ Build one loader:
 .\scripts\build.ps1 -Profile 1.21.11 -Loader neoforge
 ```
 
+Set an explicit version for a deployable local artifact:
+
+```powershell
+.\scripts\build.ps1 -Profile 1.21.11 -Loader neoforge -ModVersion 1.4.1
+```
+
+Without an explicit version, a Git checkout resolves the sentinel `0.0.0-dev` to `0.0.0-dev+<short-commit>`. A source tree without `.git` uses `0.0.0-dev+local`.
+
 Equivalent direct Gradle invocations:
 
 ```powershell
@@ -166,3 +174,7 @@ Run `bash scripts/verify-build-matrix.sh` before release. It enforces these inva
 ## Compatibility lock and supported matrix
 
 `config/build-compatibility.lock.json` is the source of truth for supported profiles and loader combinations. When adding or changing a `1.21.x` profile, update both the profile file and the lock file in the same commit.
+
+## Runtime build metadata
+
+Every Fabric, Quilt-compatible, Forge and NeoForge artifact embeds `realtime-build.properties` containing the resolved mod version, exact Minecraft profile and loader. `/realtimesync status` and the startup log use this resource, so a copied JAR can be identified without relying only on its filename.

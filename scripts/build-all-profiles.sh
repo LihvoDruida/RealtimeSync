@@ -5,10 +5,30 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
 loader=all
-if [[ "${1:-}" == "--loader" ]]; then
-  loader="${2:?Usage: scripts/build-all-profiles.sh [--loader fabric|quilt|forge|neoforge|all] [profiles...]}"
-  shift 2
-fi
+mod_version=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --loader)
+      loader="${2:?--loader requires fabric|quilt|forge|neoforge|all}"
+      shift 2
+      ;;
+    --mod-version)
+      mod_version="${2:?--mod-version requires a value}"
+      shift 2
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      echo "ERROR: unknown option '$1'" >&2
+      exit 2
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
 
 case "${loader}" in
   fabric|quilt|forge|neoforge|all) ;;
@@ -22,7 +42,7 @@ fi
 
 for profile in "${profiles[@]}"; do
   echo "==> Building Minecraft profile ${profile} (${loader})"
-  ./scripts/build.sh "${profile}" "${loader}"
+  ./scripts/build.sh "${profile}" "${loader}" "${mod_version}"
   echo "==> Finished Minecraft profile ${profile}"
   echo
 done

@@ -101,5 +101,12 @@ grep -q 'level.setDayTime(absoluteDayTime)' common/src/main/java/com/realtime/co
 grep -q 'gameRules.restoreAll(server)' common/src/main/java/com/realtime/common/RealtimeController.java || fail "Managed gamerule must be restored on stop/policy change"
 grep -q 'Files.newBufferedReader(path, StandardCharsets.UTF_8)' common/src/main/java/com/realtime/common/RealtimeConfig.java || fail "Config must read UTF-8"
 grep -q 'StandardCopyOption.ATOMIC_MOVE' common/src/main/java/com/realtime/common/RealtimeConfig.java || fail "Config saves must attempt atomic move"
+grep -q 'RealtimeConfig.defaults(logger)' common/src/main/java/com/realtime/common/RealtimeController.java || fail "Controller must defer config I/O until the server thread starts"
+if grep -RIn --include='*.java' 'configPath().toAbsolutePath()' fabric forge neoforge; then
+  fail "Loader startup logs must not expose absolute config paths"
+fi
+grep -q 'Europe/Kiev.*Europe/Kyiv' common/src/main/java/com/realtime/common/RealtimeConfig.java || fail "Legacy Europe/Kiev timezone alias migration is missing"
+grep -q 'RealtimeBuildInfo.current()' common/src/main/java/com/realtime/common/RealtimeController.java || fail "Runtime build metadata diagnostics are missing"
+grep -q '0.0.0-dev+${revision' build.gradle || fail "Local build versions must include a source revision or local marker"
 
 echo "Build matrix static verification passed."

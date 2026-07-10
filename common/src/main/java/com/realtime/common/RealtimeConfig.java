@@ -14,6 +14,7 @@ import java.time.ZoneId;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
@@ -46,6 +47,10 @@ public final class RealtimeConfig {
     private static final int MAX_SNAP_THRESHOLD_TICKS = 12000;
     private static final int MAX_CATCHUP_DIVISOR = 24000;
     private static final int MAX_OFFLINE_CATCHUP_SECONDS = 60 * 60 * 24;
+
+    private static final Map<String, String> TIME_ZONE_ALIASES = Map.of(
+            "Europe/Kiev", "Europe/Kyiv"
+    );
 
     private static final Set<String> LEGACY_TOML_KEYS = Set.of(
             "enabled", "syncAllWorlds", "syncDimensions", "ignoredDimensions", "syncMode",
@@ -88,6 +93,12 @@ public final class RealtimeConfig {
 
     private boolean migrationRequired;
 
+    public static RealtimeConfig defaults(RealtimeLog logger) {
+        RealtimeConfig defaults = new RealtimeConfig();
+        defaults.validate(logger);
+        return defaults;
+    }
+
     public static RealtimeConfig loadOrCreate(Path path, Path legacyTomlPath, RealtimeLog logger) {
         if (!Files.exists(path) && legacyTomlPath != null && Files.exists(legacyTomlPath)) {
             try {
@@ -106,8 +117,7 @@ public final class RealtimeConfig {
         }
 
         if (!Files.exists(path)) {
-            RealtimeConfig defaults = new RealtimeConfig();
-            defaults.validate(logger);
+            RealtimeConfig defaults = defaults(logger);
             defaults.save(path, logger);
             return defaults;
         }
@@ -118,8 +128,7 @@ public final class RealtimeConfig {
             return loaded;
         } catch (IOException | RuntimeException exception) {
             logger.warn("Failed to read RealtimeSync config; safe defaults are used for initial startup. {}", exception.getMessage());
-            RealtimeConfig defaults = new RealtimeConfig();
-            defaults.validate(logger);
+            RealtimeConfig defaults = defaults(logger);
             return defaults;
         }
     }
@@ -160,6 +169,12 @@ public final class RealtimeConfig {
         }
         config.dayProgressionPolicy = readString(properties, "dayProgressionPolicy", config.dayProgressionPolicy);
         config.zoneId = readString(properties, "zoneId", config.zoneId);
+        String canonicalZoneId = TIME_ZONE_ALIASES.get(config.zoneId);
+        if (canonicalZoneId != null) {
+            logger.warn("Config timezone alias {} is deprecated; migrated to {}.", config.zoneId, canonicalZoneId);
+            config.zoneId = canonicalZoneId;
+            config.migrationRequired = true;
+        }
         config.timeOffsetMinutes = readInt(properties, "timeOffsetMinutes", config.timeOffsetMinutes, logger);
         if (!properties.containsKey("timeOffsetMinutes") && properties.containsKey("offsetHours")) {
             int oldHours = readInt(properties, "offsetHours", 0, logger);
@@ -178,7 +193,7 @@ public final class RealtimeConfig {
             double updatesPerSecond = 20.0D / Math.max(1, oldInterval);
             config.smoothMaxCorrectionTicksPerSecond = Math.max(1, (int) Math.round(oldStep * updatesPerSecond));
             config.migrationRequired = true;
-            logger.warn("Config key maxSmoothStepTicks is deprecated; migrated in memory to smoothMaxCorrectionTicksPerSecond={}.", config.smoothMaxCorrectionTicksPerSecond);
+            logger.warn("Config key maxSmoothStepTicks={} with updateInterval={} is deprecated; migrated to smoothMaxCorrectionTicksPerSecond={}.", oldStep, oldInterval, config.smoothMaxCorrectionTicksPerSecond);
         }
         config.smoothSnapThresholdTicks = readInt(properties, "smoothSnapThresholdTicks", config.smoothSnapThresholdTicks, logger);
         config.smoothCatchupDivisor = readInt(properties, "smoothCatchupDivisor", config.smoothCatchupDivisor, logger);

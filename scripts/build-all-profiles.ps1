@@ -5,6 +5,9 @@ param(
 
     [string[]]$Profile,
 
+    [ValidatePattern('^[0-9A-Za-z][0-9A-Za-z._+-]*$')]
+    [string]$ModVersion = '',
+
     [switch]$Stacktrace,
     [switch]$RefreshDependencies
 )
@@ -21,9 +24,12 @@ if (-not $Profile -or $Profile.Count -eq 0) {
 
 foreach ($CurrentProfile in $Profile) {
     Write-Host "==> Building Minecraft profile $CurrentProfile ($Loader)"
-    & (Join-Path $PSScriptRoot 'build.ps1') `
-        -Profile $CurrentProfile `
-        -Loader $Loader `
-        -Stacktrace:$Stacktrace `
-        -RefreshDependencies:$RefreshDependencies
+    $BuildArguments = @{
+        Profile = $CurrentProfile
+        Loader = $Loader
+        Stacktrace = $Stacktrace
+        RefreshDependencies = $RefreshDependencies
+    }
+    if ($ModVersion) { $BuildArguments.ModVersion = $ModVersion }
+    & (Join-Path $PSScriptRoot 'build.ps1') @BuildArguments
 }

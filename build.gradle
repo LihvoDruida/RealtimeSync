@@ -90,7 +90,70 @@ ext.loaderTaskOrSkip = { String taskName, String loaderName, String targetPath -
     }
 }
 
+ext.readGitRevision = {
+    File gitDirectory = rootProject.file('.git')
+    File headFile = new File(gitDirectory, 'HEAD')
+    if (!headFile.isFile()) {
+        return null
+    }
+
+    String head = headFile.getText('UTF-8').trim()
+    String revision = head
+    if (head.startsWith('ref: ')) {
+        String reference = head.substring('ref: '.length()).trim()
+        File looseReference = new File(gitDirectory, reference)
+        if (looseReference.isFile()) {
+            revision = looseReference.getText('UTF-8').trim()
+        } else {
+            File packedReferences = new File(gitDirectory, 'packed-refs')
+            revision = packedReferences.isFile()
+                    ? packedReferences.readLines('UTF-8')
+                    .find { line -> !line.startsWith('#') && !line.startsWith('^') && line.endsWith(" ${reference}") }
+                    ?.tokenize(' ')
+                    ?.first()
+                    : null
+        }
+    }
+    return revision != null && revision ==~ /[0-9a-fA-F]{7,40}/
+            ? revision.substring(0, Math.min(8, revision.length())).toLowerCase(Locale.ROOT)
+            : null
+}
+
+ext.resolveModVersion = {
+    String cliVersion = gradle.startParameter.projectProperties.get('modVersion')
+            ?: gradle.startParameter.projectProperties.get('mod_version')
+    String envVersion = System.getenv('MOD_VERSION')
+    String configuredVersion = providers.gradleProperty('mod_version').orNull
+
+    def candidates = [
+            [source: '-PmodVersion/-Pmod_version', value: cliVersion],
+            [source: 'MOD_VERSION', value: envVersion],
+            [source: 'gradle.properties mod_version', value: configuredVersion],
+            [source: 'built-in local fallback', value: '0.0.0-dev']
+    ]
+    def selected = candidates.find { entry -> entry.value != null && !entry.value.toString().trim().isEmpty() }
+    String resolved = selected.value.toString().trim()
+    String source = selected.source.toString()
+
+    if (resolved == '0.0.0-dev') {
+        String revision = rootProject.ext.readGitRevision()
+        resolved = "0.0.0-dev+${revision ?: 'local'}"
+        source = revision == null ? 'local source fallback' : 'Git revision fallback'
+    }
+    if (!(resolved ==~ /[0-9A-Za-z][0-9A-Za-z._+-]*/)) {
+        throw new GradleException(
+                "Invalid mod version '${resolved}' from ${source}. " +
+                "Use letters, digits, dots, underscores, plus signs and hyphens only. " +
+                "Example: -PmodVersion=1.4.1"
+        )
+    }
+    return [version: resolved, source: source]
+}
+
 def minecraftProfileProperties = loadMinecraftProfile()
+def resolvedModVersion = resolveModVersion()
+minecraftProfileProperties.setProperty('mod_version', resolvedModVersion.version.toString())
+minecraftProfileProperties.setProperty('mod_version_source', resolvedModVersion.source.toString())
 
 allprojects {
     minecraftProfileProperties.each { key, value ->
@@ -155,6 +218,8 @@ tasks.register('printBuildProfile') {
         println "mcProfile=${rootProject.ext.mcProfile}"
         println "mcProfileSource=${rootProject.ext.mc_profile_source}"
         println "targetLoader=${gradle.ext.has('resolvedTargetLoader') ? gradle.ext.resolvedTargetLoader : 'all'}"
+        println "mod_version=${rootProject.ext.mod_version}"
+        println "modVersionSource=${rootProject.ext.mod_version_source}"
         println "minecraft_version=${rootProject.ext.minecraft_version}"
         println "minecraft_compat_label=${rootProject.ext.minecraft_compat_label}"
         println "minecraft_version_range_fabric=${rootProject.ext.minecraft_version_range_fabric}"

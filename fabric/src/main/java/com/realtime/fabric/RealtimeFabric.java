@@ -32,6 +32,6 @@ public final class RealtimeFabric implements ModInitializer {
 
         LOGGER.info("{} loaded for Fabric-compatible environments. Config: {}",
                 RealtimeConstants.MOD_NAME,
-                controller.configPath().toAbsolutePath());
+                controller.configPath().getFileName());
     }
 }

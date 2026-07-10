@@ -108,7 +108,7 @@ debugPerformanceLogging=false
 | `debugLogging` | `false` | Enables detailed functional logs. |
 | `debugPerformanceLogging` | `false` | Emits aggregated 60-second performance summaries rather than per-tick spam. |
 
-Legacy keys `forceDaylightCycleOff`, `offsetHours`, `maxSmoothStepTicks`, and `minutesPerMinecraftDay` are read for compatibility and migrated in memory. A legacy `realtime.toml` is parsed only for supported flat keys, backed up as `realtime.toml.bak`, and converted atomically to UTF-8 `realtime.properties`.
+Legacy keys `forceDaylightCycleOff`, `offsetHours`, `maxSmoothStepTicks`, and `minutesPerMinecraftDay` are read for compatibility and rewritten once to the canonical UTF-8 format after a successful migration. The legacy timezone alias `Europe/Kiev` is rewritten as `Europe/Kyiv`. A legacy `realtime.toml` is parsed only for supported flat keys, backed up as `realtime.toml.bak`, and converted atomically to UTF-8 `realtime.properties`.
 
 ### Absolute day-time behavior
 
@@ -135,6 +135,9 @@ ignoredDimensions=example:timeless_dimension
 
 ### Runtime architecture
 
+Startup diagnostics include the embedded mod version, Minecraft profile, loader, selected API adapters, managed dimensions, absolute `dayTime` and gamerule ownership state. Configuration loading and migration are deferred until the dedicated server thread starts; loader construction no longer rewrites files from parallel mod-loading workers.
+
+
 Loader entrypoints are deliberately thin:
 
 - Fabric/Quilt-compatible builds use `SERVER_STARTED`, `END_SERVER_TICK`, and `SERVER_STOPPED` lifecycle events.
@@ -156,6 +159,10 @@ The command reports the mode, timezone, absolute current/target `dayTime`, day i
 
 See `docs/MIGRATION_1.21X.md`, `docs/COMPATIBILITY.md`, and `docs/CONFIG_PRESETS.md`.
 
+## Local build versioning
+
+Use `-ModVersion` for deployable local jars. Without it, Git checkouts produce `0.0.0-dev+<short-commit>` and source archives without `.git` produce `0.0.0-dev+local`.
+
 ## Building
 
 Use Java 21 and run commands from the repository root.
@@ -175,6 +182,12 @@ Build one loader only:
 .\scripts\build.ps1 -Profile 1.21.11 -Loader quilt
 .\scripts\build.ps1 -Profile 1.21.11 -Loader forge
 .\scripts\build.ps1 -Profile 1.21.11 -Loader neoforge
+```
+
+Build a deployable NeoForge JAR with an explicit version:
+
+```powershell
+.\scripts\build.ps1 -Profile 1.21.11 -Loader neoforge -ModVersion 1.4.1
 ```
 
 Build the default Minecraft 1.21.5 profile for all loaders:

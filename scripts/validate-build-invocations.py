@@ -39,6 +39,10 @@ def main() -> int:
         fail("build.gradle must expose the selected profile source for diagnostics")
     if "Invalid Minecraft build profile" not in build_gradle:
         fail("build.gradle must reject malformed/truncated profile values")
+    if "projectProperties.get('modVersion')" not in build_gradle:
+        fail("build.gradle must support an explicit -PmodVersion override")
+    if "0.0.0-dev+${revision ?: 'local'}" not in build_gradle:
+        fail("local builds must not publish the ambiguous plain 0.0.0-dev version")
 
     for loader, task in LOADERS.items():
         if f"loaderTaskOrSkip('{task}'" not in build_gradle:
@@ -53,16 +57,24 @@ def main() -> int:
     require("settings.gradle", "gradle.ext.resolvedTargetLoader = targetLoader", "resolved loader diagnostics")
     require("scripts/build.ps1", '"-PmcProfile=$Profile"', "quoted PowerShell profile argument")
     require("scripts/build.ps1", '"-PtargetLoader=$Loader"', "quoted PowerShell loader argument")
+    require("scripts/build.ps1", '"-PmodVersion=$ModVersion"', "PowerShell mod-version override")
     require("scripts/build.cmd", '"-PmcProfile=%PROFILE%"', "quoted CMD profile argument")
     require("scripts/build.cmd", '"-PtargetLoader=%LOADER%"', "quoted CMD loader argument")
+    require("scripts/build.cmd", '"-PmodVersion=%MOD_VERSION%"', "CMD mod-version override")
     require("scripts/build.sh", '"-PmcProfile=${profile}"', "quoted Bash profile argument")
     require("scripts/build.sh", '"-PtargetLoader=${loader}"', "quoted Bash loader argument")
+    require("scripts/build.sh", '"-PmodVersion=${mod_version}"', "Bash mod-version override")
     require("scripts/build-all-profiles.ps1", "build.ps1", "PowerShell matrix wrapper")
     require("scripts/build-all-profiles.sh", "./scripts/build.sh", "Bash matrix wrapper")
 
     for path in ("README.md", "VERSIONING.md"):
         require(path, ".\\scripts\\build.ps1 -Profile 1.21.11 -Loader neoforge", "canonical PowerShell example")
         require(path, '"-PtargetLoader=neoforge"', "isolated direct NeoForge invocation")
+
+    require("common/src/main/resources/realtime-build.properties", "version=${version}", "embedded build version")
+    require("common/src/main/resources/realtime-build.properties", "minecraft=${minecraft_version}", "embedded Minecraft version")
+    for loader in LOADERS:
+        require(f"{loader}/build.gradle", "filesMatching('realtime-build.properties')", "build metadata expansion")
 
     workflow = (ROOT / ".github/workflows/package.yml").read_text(encoding="utf-8")
     if '"-PmcProfile=${{ steps.versions.outputs.mc_profile }}"' not in workflow:

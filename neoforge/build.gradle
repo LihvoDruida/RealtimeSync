@@ -17,6 +17,7 @@ if (!hasProperty('neoforge_version_range') || neoforge_version_range.toString().
 def archiveBaseName = "${archives_base_name}-neoforge-${minecraft_version}"
 def resourceValues = [
         version: version.toString(),
+        loader: 'neoforge',
         neoforge_version_range: neoforge_version_range.toString(),
         minecraft_version_range: minecraft_version_range_mods_toml.toString()
 ]
@@ -45,6 +46,9 @@ neoForge {
 tasks.named('processResources', ProcessResources) {
     inputs.properties resourceValues
     filesMatching('META-INF/neoforge.mods.toml') {
+        expand(resourceValues)
+    }
+    filesMatching('realtime-build.properties') {
         expand(resourceValues)
     }
 }

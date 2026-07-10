@@ -32,7 +32,7 @@ public final class RealtimeForge {
         MinecraftForge.EVENT_BUS.addListener(this::onServerTick);
         MinecraftForge.EVENT_BUS.addListener(this::onServerStopped);
 
-        LOGGER.info("{} loaded for Forge. Config: {}", RealtimeConstants.MOD_NAME, controller.configPath().toAbsolutePath());
+        LOGGER.info("{} loaded for Forge. Config: {}", RealtimeConstants.MOD_NAME, controller.configPath().getFileName());
     }
 
     private void onRegisterCommands(RegisterCommandsEvent event) {

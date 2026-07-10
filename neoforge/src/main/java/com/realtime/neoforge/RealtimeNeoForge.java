@@ -32,7 +32,7 @@ public final class RealtimeNeoForge {
         NeoForge.EVENT_BUS.addListener(this::onServerTick);
         NeoForge.EVENT_BUS.addListener(this::onServerStopped);
 
-        LOGGER.info("{} loaded for NeoForge. Config: {}", RealtimeConstants.MOD_NAME, controller.configPath().toAbsolutePath());
+        LOGGER.info("{} loaded for NeoForge. Config: {}", RealtimeConstants.MOD_NAME, controller.configPath().getFileName());
     }
 
     private void onRegisterCommands(RegisterCommandsEvent event) {

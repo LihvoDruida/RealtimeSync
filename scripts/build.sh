@@ -6,6 +6,7 @@ cd "${ROOT_DIR}"
 
 profile="${1:-1.21.5}"
 loader="${2:-all}"
+mod_version="${3:-}"
 
 case "${loader}" in
   fabric) task=buildFabric ;;
@@ -28,4 +29,7 @@ if [[ "${loader}" != all ]]; then
   }
 fi
 
-exec ./gradlew "-PmcProfile=${profile}" "-PtargetLoader=${loader}" clean "${task}"
+gradle_args=("-PmcProfile=${profile}" "-PtargetLoader=${loader}")
+[[ -z "${mod_version}" ]] || gradle_args+=("-PmodVersion=${mod_version}")
+gradle_args+=(clean "${task}")
+exec ./gradlew "${gradle_args[@]}"
