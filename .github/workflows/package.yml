@@ -15,6 +15,7 @@ concurrency:
 env:
   CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
   CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+  PYTHONDONTWRITEBYTECODE: "1"
 
 jobs:
   validate:
@@ -35,29 +36,33 @@ jobs:
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
 
+      - name: Remove transient Python caches
+        shell: bash
+        run: find scripts -type d -name __pycache__ -prune -exec rm -rf {} +
+
+      - name: Validate source tree cleanliness
+        shell: bash
+        run: python3 -B scripts/validate-source-tree.py
+
       - name: Validate build profiles against compatibility lock
         shell: bash
-        run: python3 scripts/validate-build-profiles.py
+        run: python3 -B scripts/validate-build-profiles.py
 
       - name: Validate entrypoints and loader metadata
         shell: bash
-        run: python3 scripts/validate-entrypoints.py
+        run: python3 -B scripts/validate-entrypoints.py
 
       - name: Validate Gradle resource template expansion
         shell: bash
-        run: python3 scripts/validate-resource-expansion.py
+        run: python3 -B scripts/validate-resource-expansion.py
 
       - name: Validate dependency coordinates offline
         shell: bash
-        run: python3 scripts/validate-dependency-artifacts.py
+        run: python3 -B scripts/validate-dependency-artifacts.py
 
       - name: Run core unit tests
         shell: bash
         run: bash scripts/run-core-tests.sh
-
-      - name: Validate source tree cleanliness
-        shell: bash
-        run: python3 scripts/validate-source-tree.py
 
       - name: Verify build matrix guardrails
         shell: bash
@@ -79,7 +84,7 @@ jobs:
       - name: Generate matrix from compatibility lock
         id: matrix
         shell: bash
-        run: python3 scripts/generate-ci-matrix.py --github-output
+        run: python3 -B scripts/generate-ci-matrix.py --github-output
 
   build-loader:
     name: Build ${{ matrix.loader }} for Minecraft ${{ matrix.mc_profile }}
@@ -172,7 +177,7 @@ jobs:
       - name: Validate jar metadata
         shell: bash
         run: |
-          python3 scripts/validate-jar-metadata.py \
+          python3 -B scripts/validate-jar-metadata.py \
             --loader '${{ steps.versions.outputs.loader }}' \
             --minecraft-version '${{ steps.versions.outputs.minecraft_version }}' \
             --mod-version '${{ steps.versions.outputs.mod_version }}' \

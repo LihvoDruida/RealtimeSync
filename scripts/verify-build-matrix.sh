@@ -22,13 +22,23 @@ fail() {
   exit 1
 }
 
+cleanup_python_caches() {
+  find scripts -type d -name __pycache__ -prune -exec rm -rf {} +
+  find scripts -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
+}
+
+cleanup_python_caches
+
 [[ -s config/build-compatibility.lock.json ]] || fail "Missing config/build-compatibility.lock.json"
-python3 scripts/validate-build-profiles.py
-python3 scripts/validate-entrypoints.py
-python3 scripts/validate-resource-expansion.py
-python3 scripts/validate-dependency-artifacts.py
-python3 scripts/validate-build-invocations.py
-python3 -B -m py_compile \
+python3 -B scripts/validate-build-profiles.py
+python3 -B scripts/validate-entrypoints.py
+python3 -B scripts/validate-resource-expansion.py
+python3 -B scripts/validate-dependency-artifacts.py
+python3 -B scripts/validate-build-invocations.py
+python_cache_dir="$(mktemp -d)"
+matrix_file="$(mktemp)"
+trap 'rm -rf "${python_cache_dir}"; rm -f "${matrix_file}"; cleanup_python_caches' EXIT
+PYTHONPYCACHEPREFIX="${python_cache_dir}" python3 -m py_compile \
   scripts/generate-ci-matrix.py \
   scripts/validate-build-profiles.py \
   scripts/validate-entrypoints.py \
@@ -39,13 +49,10 @@ python3 -B -m py_compile \
   scripts/validate-source-tree.py \
   scripts/check-fabric-loom-1-21.py \
   scripts/validate-build-invocations.py
-find scripts -type d -name __pycache__ -prune -exec rm -rf {} +
 
-matrix_file="$(mktemp)"
-trap 'rm -f "${matrix_file}"' EXIT
-python3 scripts/generate-ci-matrix.py >"${matrix_file}"
-python3 scripts/check-ci-matrix.py "${matrix_file}"
-python3 scripts/check-fabric-loom-1-21.py
+python3 -B scripts/generate-ci-matrix.py >"${matrix_file}"
+python3 -B scripts/check-ci-matrix.py "${matrix_file}"
+python3 -B scripts/check-fabric-loom-1-21.py
 bash -n scripts/build.sh scripts/build-all-profiles.sh scripts/ci-read-profile.sh scripts/verify-build-matrix.sh
 bash scripts/run-core-tests.sh
 
@@ -63,6 +70,12 @@ grep -q "'v\*'" .github/workflows/package.yml || fail "Release workflow must tri
 grep -q "generate-ci-matrix.py --github-output" .github/workflows/package.yml || fail "Workflow must generate matrix from compatibility lock"
 grep -q "fromJson(needs.prepare-matrix.outputs.build_matrix)" .github/workflows/package.yml || fail "Workflow must consume generated matrix"
 grep -q "validate-source-tree.py" .github/workflows/package.yml || fail "Workflow must validate source cleanliness"
+grep -q 'PYTHONDONTWRITEBYTECODE: "1"' .github/workflows/package.yml || fail "Workflow must disable Python bytecode caches"
+grep -q 'Remove transient Python caches' .github/workflows/package.yml || fail "Workflow must clean transient Python caches before source validation"
+grep -q 'cleanup_python_caches' scripts/verify-build-matrix.sh || fail "Build verification must clean transient Python caches"
+grep -q 'python3 -B scripts/validate-source-tree.py' .github/workflows/package.yml || fail "Workflow must run source validation without bytecode writes"
+grep -q 'git_source_names' scripts/validate-source-tree.py || fail "Source validation must ignore Git-ignored runtime caches while rejecting tracked artifacts"
+grep -q 'PYTHONPYCACHEPREFIX="${python_cache_dir}"' scripts/verify-build-matrix.sh || fail "Explicit Python compilation must write outside the source tree"
 grep -q "run-core-tests.sh" .github/workflows/package.yml || fail "Workflow must run core unit tests"
 grep -q "validate-resource-expansion.py" .github/workflows/package.yml || fail "Workflow must validate Gradle resource template expansion"
 grep -q "fail-mode: fail" .github/workflows/package.yml || fail "CurseForge publication failures must fail visibly"

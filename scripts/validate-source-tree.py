@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 import zipfile
 from pathlib import Path, PurePosixPath
 
@@ -35,7 +36,44 @@ def validate_name(name: str) -> list[str]:
     return errors
 
 
+def git_source_names() -> list[str] | None:
+    """Return tracked and non-ignored source files when Git metadata is available.
+
+    CI tools may create ignored runtime files such as __pycache__ after checkout.
+    Those files are not part of the source tree or release archive and must not
+    make source validation order-dependent. Accidentally committed cache files
+    are still returned by --cached and therefore remain rejected.
+    """
+    if not (ROOT / ".git").exists():
+        return None
+    result = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(ROOT),
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+        ],
+        check=False,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        return None
+    return [
+        entry.decode("utf-8", errors="surrogateescape")
+        for entry in result.stdout.split(b"\0")
+        if entry
+    ]
+
+
 def tree_names() -> list[str]:
+    git_names = git_source_names()
+    if git_names is not None:
+        return git_names
+
     names: list[str] = []
     for path in ROOT.rglob("*"):
         if ".git" in path.parts:
@@ -62,7 +100,8 @@ def main() -> int:
         if len(errors) > 100:
             print(f"ERROR: ... and {len(errors) - 100} more")
         return 1
-    print(f"Source artifact validation passed for {len(names)} file(s).")
+    scope = "archive" if args.archive else "tracked/non-ignored source tree"
+    print(f"Source artifact validation passed for {len(names)} file(s) in {scope}.")
     return 0
 
 
