@@ -158,16 +158,55 @@ See `docs/MIGRATION_1.21X.md`, `docs/COMPATIBILITY.md`, and `docs/CONFIG_PRESETS
 
 ## Building
 
-Build the default profile from `gradle.properties`:
+Use Java 21 and run commands from the repository root.
 
-```bash
-./gradlew clean buildAllLoaders
+### Windows PowerShell (recommended)
+
+Build all enabled loaders for Minecraft 1.21.11:
+
+```powershell
+.\scripts\build.ps1 -Profile 1.21.11 -Loader all
 ```
 
-Build one exact Minecraft profile:
+Build one loader only:
+
+```powershell
+.\scripts\build.ps1 -Profile 1.21.11 -Loader fabric
+.\scripts\build.ps1 -Profile 1.21.11 -Loader quilt
+.\scripts\build.ps1 -Profile 1.21.11 -Loader forge
+.\scripts\build.ps1 -Profile 1.21.11 -Loader neoforge
+```
+
+Build the default Minecraft 1.21.5 profile for all loaders:
+
+```powershell
+.\scripts\build.ps1 -Profile 1.21.5 -Loader all
+```
+
+The PowerShell wrapper passes `mcProfile` and `targetLoader` as separate quoted native arguments, validates the profile/loader pair, and avoids configuring unrelated loader projects.
+
+### Direct Gradle commands on Windows
+
+These commands are also valid:
+
+```powershell
+.\gradlew.bat "-PmcProfile=1.21.11" "-PtargetLoader=fabric" clean buildFabric
+.\gradlew.bat "-PmcProfile=1.21.11" "-PtargetLoader=quilt" clean buildQuilt
+.\gradlew.bat "-PmcProfile=1.21.11" "-PtargetLoader=forge" clean buildForge
+.\gradlew.bat "-PmcProfile=1.21.11" "-PtargetLoader=neoforge" clean buildNeoForge
+.\gradlew.bat "-PmcProfile=1.21.5" "-PtargetLoader=all" clean buildAllLoaders
+```
+
+Do not omit `targetLoader` in automation. A single-loader task can infer it, but setting it explicitly prevents unrelated loader plugins and dependencies from being configured.
+
+### Linux/macOS
 
 ```bash
-./gradlew -PmcProfile=1.21.11 clean buildAllLoaders
+./scripts/build.sh 1.21.11 fabric
+./scripts/build.sh 1.21.11 quilt
+./scripts/build.sh 1.21.11 forge
+./scripts/build.sh 1.21.11 neoforge
+./scripts/build.sh 1.21.5 all
 ```
 
 Build all profiles:
@@ -176,19 +215,24 @@ Build all profiles:
 ./scripts/build-all-profiles.sh
 ```
 
-Build selected profiles:
+Build selected profiles or one loader across profiles:
 
 ```bash
 ./scripts/build-all-profiles.sh 1.21.5 1.21.10 1.21.11
+./scripts/build-all-profiles.sh --loader fabric 1.21.10 1.21.11
 ```
 
-Build one loader for one profile:
+Windows equivalent:
 
-```bash
-./gradlew -PmcProfile=1.21.11 clean buildFabric
-./gradlew -PmcProfile=1.21.11 clean buildQuilt
-./gradlew -PmcProfile=1.21.11 clean buildForge
-./gradlew -PmcProfile=1.21.11 clean buildNeoForge
+```powershell
+.\scripts\build-all-profiles.ps1
+.\scripts\build-all-profiles.ps1 -Loader fabric -Profile 1.21.10,1.21.11
+```
+
+Inspect the resolved profile without configuring loader projects:
+
+```powershell
+.\gradlew.bat "-PmcProfile=1.21.11" "-PtargetLoader=none" printBuildProfile
 ```
 
 Output folders:
@@ -199,6 +243,8 @@ quilt/build/libs/
 forge/build/libs/
 neoforge/build/libs/
 ```
+
+When running several loader builds separately, use the wrapper scripts or keep the matching `targetLoader`. Otherwise a root `clean` can configure/clean unrelated included projects and make the sequence slower or remove previous outputs.
 
 ## Version profiles
 

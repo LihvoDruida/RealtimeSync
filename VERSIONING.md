@@ -11,10 +11,43 @@ This branch is dedicated to Minecraft `1.21.x` only:
 
 Do not add `26.x` profiles to `mc-1.21.x`. Keep them in a separate branch if they are needed later.
 
-## Build a single profile
+## Recommended Windows build commands
+
+Build all enabled loaders for Minecraft 1.21.11:
+
+```powershell
+.\scripts\build.ps1 -Profile 1.21.11 -Loader all
+```
+
+Build one loader:
+
+```powershell
+.\scripts\build.ps1 -Profile 1.21.11 -Loader fabric
+.\scripts\build.ps1 -Profile 1.21.11 -Loader quilt
+.\scripts\build.ps1 -Profile 1.21.11 -Loader forge
+.\scripts\build.ps1 -Profile 1.21.11 -Loader neoforge
+```
+
+Equivalent direct Gradle invocations:
+
+```powershell
+.\gradlew.bat "-PmcProfile=1.21.11" "-PtargetLoader=fabric" clean buildFabric
+.\gradlew.bat "-PmcProfile=1.21.11" "-PtargetLoader=quilt" clean buildQuilt
+.\gradlew.bat "-PmcProfile=1.21.11" "-PtargetLoader=forge" clean buildForge
+.\gradlew.bat "-PmcProfile=1.21.11" "-PtargetLoader=neoforge" clean buildNeoForge
+.\gradlew.bat "-PmcProfile=1.21.5" "-PtargetLoader=all" clean buildAllLoaders
+```
+
+`targetLoader` isolates the relevant subproject. The settings script also infers it from a single `buildFabric`, `buildQuilt`, `buildForge`, or `buildNeoForge` task, but explicit selection is required in CI and recommended in local automation.
+
+## Linux/macOS build commands
 
 ```bash
-./gradlew -PmcProfile=1.21.11 clean buildAllLoaders
+./scripts/build.sh 1.21.11 fabric
+./scripts/build.sh 1.21.11 quilt
+./scripts/build.sh 1.21.11 forge
+./scripts/build.sh 1.21.11 neoforge
+./scripts/build.sh 1.21.5 all
 ```
 
 ## Build all profiles locally
@@ -23,20 +56,30 @@ Do not add `26.x` profiles to `mc-1.21.x`. Keep them in a separate branch if the
 ./scripts/build-all-profiles.sh
 ```
 
+Windows:
+
+```powershell
+.\scripts\build-all-profiles.ps1
+```
+
 ## Build only selected profiles
 
 ```bash
 ./scripts/build-all-profiles.sh 1.21.5 1.21.10 1.21.11
+./scripts/build-all-profiles.sh --loader neoforge 1.21.10 1.21.11
 ```
 
-## Build one loader
-
-```bash
-./gradlew -PmcProfile=1.21.11 clean buildFabric
-./gradlew -PmcProfile=1.21.11 clean buildQuilt
-./gradlew -PmcProfile=1.21.11 clean buildForge
-./gradlew -PmcProfile=1.21.11 clean buildNeoForge
+```powershell
+.\scripts\build-all-profiles.ps1 -Loader neoforge -Profile 1.21.10,1.21.11
 ```
+
+## Diagnose profile resolution
+
+```powershell
+.\gradlew.bat "-PmcProfile=1.21.11" "-PtargetLoader=none" printBuildProfile
+```
+
+The output includes `mcProfileSource` and `targetLoader`. A malformed or truncated value such as `1` is rejected before any loader project is configured.
 
 ## Profile keys
 

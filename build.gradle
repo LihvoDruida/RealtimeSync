@@ -7,20 +7,52 @@ plugins {
 import java.util.Properties
 
 ext.loadMinecraftProfile = {
-    String requestedProfile = (findProperty('mcProfile') ?: System.getenv('MC_PROFILE') ?: findProperty('minecraft_version') ?: '1.21.5').toString()
-    File profileFile = rootProject.file("buildProfiles/${requestedProfile}.properties")
+    // Read the command-line value directly before consulting gradle.properties.
+    // This avoids accidental shadowing/coercion by extra properties or plugins.
+    String cliProfile = gradle.startParameter.projectProperties.get('mcProfile')
+    String envProfile = System.getenv('MC_PROFILE')
+    String configuredProfile = providers.gradleProperty('mcProfile').orNull
+    String legacyProfile = providers.gradleProperty('minecraft_version').orNull
 
+    def candidates = [
+            [source: '-PmcProfile', value: cliProfile],
+            [source: 'MC_PROFILE', value: envProfile],
+            [source: 'gradle.properties mcProfile', value: configuredProfile],
+            [source: 'minecraft_version fallback', value: legacyProfile],
+            [source: 'built-in default', value: '1.21.5']
+    ]
+    def selected = candidates.find { entry -> entry.value != null && !entry.value.toString().trim().isEmpty() }
+    String requestedProfile = selected.value.toString().trim()
+    String profileSource = selected.source.toString()
+
+    if (!(requestedProfile ==~ /1\.21(?:\.(?:[1-9]|10|11))?/)) {
+        throw new GradleException(
+                "Invalid Minecraft build profile '${requestedProfile}' from ${profileSource}. " +
+                "Expected one of the explicit 1.21.x profile names such as 1.21, 1.21.5 or 1.21.11. " +
+                "On PowerShell prefer: .\\scripts\\build.ps1 -Profile 1.21.11 -Loader neoforge"
+        )
+    }
+
+    File profileFile = rootProject.file("buildProfiles/${requestedProfile}.properties")
     Properties loaded = new Properties()
     if (profileFile.isFile()) {
-        profileFile.withInputStream { loaded.load(it) }
+        profileFile.withReader('UTF-8') { loaded.load(it) }
     } else {
-        throw new GradleException("Minecraft build profile '${requestedProfile}' was not found at ${profileFile}. Add buildProfiles/${requestedProfile}.properties or use a supported -PmcProfile value.")
+        def supportedProfiles = rootProject.file('buildProfiles')
+                .listFiles({ File file -> file.name.endsWith('.properties') } as FileFilter)
+                ?.collect { it.name.substring(0, it.name.length() - '.properties'.length()) }
+                ?.sort { value -> value.tokenize('.').collect { String.format('%04d', it as int) }.join('.') }
+                ?: []
+        throw new GradleException(
+                "Minecraft build profile '${requestedProfile}' from ${profileSource} was not found at ${profileFile}. " +
+                "Supported profiles: ${supportedProfiles.join(', ')}"
+        )
     }
 
     loaded.setProperty('mcProfile', requestedProfile)
     loaded.setProperty('minecraft_profile', requestedProfile)
+    loaded.setProperty('mc_profile_source', profileSource)
     loaded.setProperty('profile_file', profileFile.path)
-
     return loaded
 }
 
@@ -51,7 +83,7 @@ ext.loaderTaskOrSkip = { String taskName, String loaderName, String targetPath -
                 if (!loaderEnabled) {
                     logger.lifecycle("Skipping ${loaderName} for Minecraft ${rootProject.ext.minecraft_version}: profile disables enable_${loaderKey}.")
                 } else {
-                    logger.lifecycle("Skipping ${loaderName}: project :${loaderKey} is not included for targetLoader=${findProperty('targetLoader') ?: System.getenv('TARGET_LOADER') ?: 'all'}.")
+                    logger.lifecycle("Skipping ${loaderName}: project :${loaderKey} is not included for targetLoader=${gradle.ext.has('resolvedTargetLoader') ? gradle.ext.resolvedTargetLoader : 'all'}.")
                 }
             }
         }
@@ -103,11 +135,26 @@ subprojects {
     }
 }
 
+
+
+tasks.register('listBuildProfiles') {
+    group = 'help'
+    description = 'Lists all explicit Minecraft build profiles available in buildProfiles/.'
+    doLast {
+        rootProject.file('buildProfiles')
+                .listFiles({ File file -> file.name.endsWith('.properties') } as FileFilter)
+                .collect { it.name.substring(0, it.name.length() - '.properties'.length()) }
+                .sort { value -> value.tokenize('.').collect { String.format('%04d', it as int) }.join('.') }
+                .each { println it }
+    }
+}
 tasks.register('printBuildProfile') {
     group = 'help'
     description = 'Prints the resolved Minecraft build profile used by Gradle.'
     doLast {
         println "mcProfile=${rootProject.ext.mcProfile}"
+        println "mcProfileSource=${rootProject.ext.mc_profile_source}"
+        println "targetLoader=${gradle.ext.has('resolvedTargetLoader') ? gradle.ext.resolvedTargetLoader : 'all'}"
         println "minecraft_version=${rootProject.ext.minecraft_version}"
         println "minecraft_compat_label=${rootProject.ext.minecraft_compat_label}"
         println "minecraft_version_range_fabric=${rootProject.ext.minecraft_version_range_fabric}"

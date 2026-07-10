@@ -26,6 +26,7 @@ fail() {
 python3 scripts/validate-build-profiles.py
 python3 scripts/validate-entrypoints.py
 python3 scripts/validate-dependency-artifacts.py
+python3 scripts/validate-build-invocations.py
 python3 -B -m py_compile \
   scripts/generate-ci-matrix.py \
   scripts/validate-build-profiles.py \
@@ -34,7 +35,8 @@ python3 -B -m py_compile \
   scripts/validate-jar-metadata.py \
   scripts/check-ci-matrix.py \
   scripts/validate-source-tree.py \
-  scripts/check-fabric-loom-1-21.py
+  scripts/check-fabric-loom-1-21.py \
+  scripts/validate-build-invocations.py
 find scripts -type d -name __pycache__ -prune -exec rm -rf {} +
 
 matrix_file="$(mktemp)"
@@ -42,6 +44,7 @@ trap 'rm -f "${matrix_file}"' EXIT
 python3 scripts/generate-ci-matrix.py >"${matrix_file}"
 python3 scripts/check-ci-matrix.py "${matrix_file}"
 python3 scripts/check-fabric-loom-1-21.py
+bash -n scripts/build.sh scripts/build-all-profiles.sh scripts/ci-read-profile.sh scripts/verify-build-matrix.sh
 bash scripts/run-core-tests.sh
 
 grep -q "gradle-9.4.0-bin.zip" gradle/wrapper/gradle-wrapper.properties || fail "Gradle wrapper must stay on 9.4.0"

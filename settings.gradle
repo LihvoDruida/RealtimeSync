@@ -63,30 +63,62 @@ dependencyResolutionManagement {
 
 rootProject.name = 'RealtimeSync'
 
-// CI builds exactly one loader per matrix entry. Keeping every loader included for
-// metadata-only tasks causes unrelated loaders to configure and resolve their
-// userdev artifacts. This is especially expensive and fragile for Forge 1.21.10,
-// where ForgeGradle/Mavenizer performs a full Minecraft recompile during project
-// configuration. Use -PtargetLoader=<fabric|quilt|forge|neoforge> to include one
-// loader, -PtargetLoader=all for local buildAllLoaders, or -PtargetLoader=none for
-// root-only tasks such as printBuildProfile.
+// CI and local single-loader builds should configure only the requested loader.
+// The explicit -PtargetLoader value wins. When it is omitted, infer the loader
+// from buildFabric/buildQuilt/buildForge/buildNeoForge or :loader:task paths.
 def supportedLoaders = ['fabric', 'quilt', 'forge', 'neoforge']
 def requestedTasks = gradle.startParameter.taskNames.collect { it.toString() }
-def rootOnlyProfileTask = !requestedTasks.isEmpty() && requestedTasks.every { taskName ->
-    taskName == 'printBuildProfile' || taskName.endsWith(':printBuildProfile')
+def normalizedTasks = requestedTasks.collect { it.replace('\\', '/').replaceFirst('^:', '').toLowerCase(Locale.ROOT) }
+def rootOnlyTaskNames = ['printbuildprofile', 'listbuildprofiles', 'help', 'tasks', 'properties']
+def rootOnlyProfileTask = !normalizedTasks.isEmpty() && normalizedTasks.every { taskName ->
+    rootOnlyTaskNames.contains(taskName) || taskName == 'clean'
 }
-def targetLoader = gradle.startParameter.projectProperties.get('targetLoader')
-        ?: System.getenv('TARGET_LOADER')
-        ?: (rootOnlyProfileTask ? 'none' : 'all')
 
-targetLoader = targetLoader.toString().toLowerCase(Locale.ROOT)
+def loaderTaskNames = [
+        fabric  : 'buildfabric',
+        quilt   : 'buildquilt',
+        forge   : 'buildforge',
+        neoforge: 'buildneoforge'
+]
+def inferredLoaders = supportedLoaders.findAll { loader ->
+    normalizedTasks.any { taskName ->
+        taskName == loaderTaskNames[loader] ||
+                taskName == "${loader}:build" ||
+                taskName.startsWith("${loader}:")
+    }
+}
+
+def explicitTargetLoader = gradle.startParameter.projectProperties.get('targetLoader')
+        ?: System.getenv('TARGET_LOADER')
+def targetLoader
+if (explicitTargetLoader != null && !explicitTargetLoader.toString().trim().isEmpty()) {
+    targetLoader = explicitTargetLoader.toString().trim().toLowerCase(Locale.ROOT)
+} else if (normalizedTasks.contains('buildallloaders')) {
+    targetLoader = 'all'
+} else if (inferredLoaders.size() == 1) {
+    targetLoader = inferredLoaders.first()
+} else if (rootOnlyProfileTask) {
+    targetLoader = 'none'
+} else {
+    targetLoader = 'all'
+}
+
+if (!((['all', 'none'] + supportedLoaders).contains(targetLoader))) {
+    throw new GradleException("Unsupported targetLoader='${targetLoader}'. Use one of: all, none, ${supportedLoaders.join(', ')}")
+}
+if (targetLoader in supportedLoaders && !inferredLoaders.isEmpty() && !inferredLoaders.contains(targetLoader)) {
+    throw new GradleException(
+            "targetLoader='${targetLoader}' conflicts with requested task(s) ${requestedTasks}. " +
+            "Use the matching loader or buildAllLoaders with -PtargetLoader=all."
+    )
+}
+
+gradle.ext.resolvedTargetLoader = targetLoader
 
 if (targetLoader == 'all') {
     supportedLoaders.each { include it }
 } else if (targetLoader == 'none') {
     // Root-only Gradle invocation. Do not include loader projects.
-} else if (supportedLoaders.contains(targetLoader)) {
-    include targetLoader
 } else {
-    throw new GradleException("Unsupported targetLoader='${targetLoader}'. Use one of: all, none, ${supportedLoaders.join(', ')}")
+    include targetLoader
 }

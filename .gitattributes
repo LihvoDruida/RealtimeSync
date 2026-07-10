@@ -13,3 +13,5 @@
 /scripts/*.py  text eol=lf
 /.github/workflows/*.yml text eol=lf
 /.github/workflows/*.yaml text eol=lf
+/scripts/*.ps1 text eol=crlf
+/scripts/*.cmd text eol=crlf

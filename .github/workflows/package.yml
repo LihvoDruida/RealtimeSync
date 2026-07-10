@@ -161,11 +161,11 @@ jobs:
 
       - name: Print Gradle profile
         shell: bash
-        run: bash ./gradlew -PmcProfile=${{ steps.versions.outputs.mc_profile }} -PtargetLoader=none printBuildProfile --stacktrace
+        run: ./gradlew "-PmcProfile=${{ steps.versions.outputs.mc_profile }}" "-PtargetLoader=none" printBuildProfile --stacktrace
 
       - name: Build loader jar
         shell: bash
-        run: bash ./gradlew -PmcProfile=${{ steps.versions.outputs.mc_profile }} -PtargetLoader=${{ steps.versions.outputs.loader }} clean ${{ steps.versions.outputs.gradle_task }} --stacktrace
+        run: ./gradlew "-PmcProfile=${{ steps.versions.outputs.mc_profile }}" "-PtargetLoader=${{ steps.versions.outputs.loader }}" clean ${{ steps.versions.outputs.gradle_task }} --stacktrace
 
       - name: Validate jar metadata
         shell: bash
