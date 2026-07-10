@@ -10,59 +10,55 @@ if (!rootProject.ext.isLoaderEnabled('neoforge')) {
 
 apply plugin: 'net.neoforged.moddev'
 
+if (!hasProperty('neoforge_version_range') || neoforge_version_range.toString().trim().isEmpty()) {
+    throw new GradleException("Missing required neoforge_version_range for Minecraft ${minecraft_version}; do not reuse javafml loaderVersion for the NeoForge runtime dependency.")
+}
+
+def archiveBaseName = "${archives_base_name}-neoforge-${minecraft_version}"
+def resourceValues = [
+        version: version.toString(),
+        neoforge_version_range: neoforge_version_range.toString(),
+        minecraft_version_range: minecraft_version_range_mods_toml.toString()
+]
+def licenseArchiveName = "LICENSE_${archiveBaseName}"
+
 base {
-    archivesName = "${project.archives_base_name}-neoforge-${project.minecraft_version}"
+    archivesName = archiveBaseName
 }
 
 sourceSets.main.java.srcDir(rootProject.file('common/src/main/java'))
 sourceSets.main.resources.srcDir(rootProject.file('common/src/main/resources'))
 
 neoForge {
-    version = project.neoforge_version
+    version = neoforge_version
 
     runs {
-        client {
-            client()
-        }
-        server {
-            server()
-        }
+        client { client() }
+        server { server() }
     }
 
     mods {
-        realtime {
-            sourceSet sourceSets.main
-        }
+        realtime { sourceSet sourceSets.main }
     }
 }
 
-processResources {
-    if (!project.hasProperty('neoforge_version_range') || project.neoforge_version_range.toString().trim().isEmpty()) {
-        throw new GradleException("Missing required neoforge_version_range for Minecraft ${project.minecraft_version}; do not reuse javafml loaderVersion for the NeoForge runtime dependency.")
-    }
-
-    inputs.property 'version', project.version
-    inputs.property 'neoforge_version_range', project.neoforge_version_range
-    inputs.property 'minecraft_version_range_mods_toml', project.minecraft_version_range_mods_toml
+tasks.named('processResources', ProcessResources) {
+    inputs.properties resourceValues
     filesMatching('META-INF/neoforge.mods.toml') {
-        expand(
-                version: project.version,
-                neoforge_version_range: project.neoforge_version_range,
-                minecraft_version_range: project.minecraft_version_range_mods_toml
-        )
+        expand(resourceValues)
     }
 }
 
-jar {
+tasks.named('jar', Jar) {
     from(rootProject.file('LICENSE')) {
-        rename { "${it}_${project.base.archivesName.get()}" }
+        rename { licenseArchiveName }
     }
 }
 
 publishing {
     publications {
         create('mavenJava', MavenPublication) {
-            artifactId = project.base.archivesName.get()
+            artifactId = archiveBaseName
             from components.java
         }
     }

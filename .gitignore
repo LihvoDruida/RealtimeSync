@@ -1,42 +1,47 @@
-# gradle
-
+# Gradle and generated build output
 .gradle/
 build/
 out/
 classes/
+run/
+run-data/
 
-# eclipse
+# Compiled artifacts (the wrapper jar is the only source-controlled jar)
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+*.zip
+*.tmp
+*.temp
+problems-report.html
+realtime-sync-matrix.json
 
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+
+# Eclipse
 *.launch
+.classpath
+.project
+.settings/
 
-# idea
-
+# IntelliJ IDEA
 .idea/
 *.iml
 *.ipr
 *.iws
 
-# vscode
-
-.settings/
+# VS Code
 .vscode/
 bin/
-.classpath
-.project
 
-# macos
-
-*.DS_Store
-
-# fabric
-
-run/
-
-# java
-
+# JVM diagnostics
 hs_err_*.log
 replay_*.log
 *.hprof
 *.jfr
-/scripts/__pycache__
-*.zip
+
+# macOS
+*.DS_Store

@@ -7,64 +7,111 @@ import net.minecraft.server.level.ServerPlayer;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.zip.CRC32;
 
+/** Single-server-thread controller. Loader entrypoints must call it only from official server lifecycle/tick events. */
 public final class RealtimeController {
     private static final int CONFIG_RELOAD_CHECK_INTERVAL_TICKS = 100;
     private static final int DAYLIGHT_RULE_GUARD_INTERVAL_TICKS = 20 * 60;
+    private static final long PERFORMANCE_LOG_INTERVAL_NANOS = 60_000_000_000L;
     private static final String OVERWORLD_DIMENSION_ID = "minecraft:overworld";
 
     private final RealtimeLog logger;
     private final Path configPath;
     private final Path legacyConfigPath;
+    private final Path statePath;
     private final RealtimeMath timeMath = new RealtimeMath();
     private final RealtimeGameRules gameRules;
+    private final Map<String, RealtimeMath.SmoothState> smoothStates = new HashMap<>();
+    private final Map<String, Long> lastSmoothUpdateNanos = new HashMap<>();
+    private final Set<String> unresolvedDimensionWarnings = new HashSet<>();
+    private final Set<String> largeJumpWarnings = new HashSet<>();
 
-    private RealtimeConfig config = new RealtimeConfig();
-    private long configLastModified = -1L;
-    private int tickCounter = 0;
-    private int configReloadTickCounter = 0;
-    private int daylightRuleGuardTickCounter = 0;
-    private boolean sleepSkipLogged = false;
+    private RealtimeConfig config;
+    private ConfigFingerprint configFingerprint = ConfigFingerprint.missing();
+    private int tickCounter;
+    private int configReloadTickCounter;
+    private int daylightRuleGuardTickCounter;
+    private boolean sleepSkipLogged;
+    private boolean rulesSuspendedForSleep;
     private long lastProcessedServerTick = RealtimeServerState.UNKNOWN_TICK;
     private MinecraftServer activeServer;
+    private boolean customClockInitialized;
+    private Instant lastSuccessfulUpdate;
+    private Instant lastConfigReload;
+
+    private long performanceWindowStartNanos;
+    private long performanceUpdates;
+    private long performanceSkippedUpdates;
+    private long performanceTotalNanos;
+    private long performanceMaxNanos;
+    private long performanceConfigReloads;
+    private long performanceGameruleChecks;
 
     public RealtimeController(Path configDir, RealtimeLog logger) {
         this.logger = logger;
         this.configPath = configDir.resolve("realtime.properties");
         this.legacyConfigPath = configDir.resolve("realtime.toml");
+        this.statePath = configDir.resolve("realtime-state.properties");
         this.gameRules = new RealtimeGameRules(logger);
-        reloadConfig(true);
+        this.config = RealtimeConfig.loadOrCreate(configPath, legacyConfigPath, logger);
+        this.configFingerprint = fingerprint(configPath);
     }
 
     public Path configPath() {
         return configPath;
     }
 
+    public void registerCommands(com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcher) {
+        RealtimeStatusCommand.register(dispatcher, this, logger);
+    }
+
     public void onServerStarted(MinecraftServer server) {
         activeServer = server;
-        resetRuntimeState();
+        resetRuntimeState(false);
         RealtimeWorldTime.resetRuntimeState();
-        reloadConfig(false);
-        tickCounter = 0;
-        ensureDaylightCycleOff(server, true);
+        reloadConfig(true);
+        initializeCustomClockIfNeeded(server);
+        manageDaylightRules(server, true);
         syncServerTime(server);
+        logger.info("RealtimeSync started. gameruleAdapter={}, dimensionAdapter={}, commandPermissionAdapter={}, mode={}, zoneId={}, daylightRulePolicy={}, config={}",
+                gameRules.adapterName(),
+                RealtimeWorldTime.dimensionAdapterName(),
+                RealtimeStatusCommand.permissionAdapterName(),
+                config.customDayLengthMinutes > 0 ? "custom-day-length" : config.syncMode,
+                config.resolvedZoneId().getId(),
+                config.daylightRulePolicy,
+                configPath.getFileName());
     }
 
     public void onServerStopped(MinecraftServer server) {
-        if (activeServer == server) {
-            activeServer = null;
+        if (activeServer != server) {
+            return;
         }
-        resetRuntimeState();
+        persistCustomClockIfNeeded();
+        gameRules.restoreAll(server);
+        activeServer = null;
+        resetRuntimeState(true);
         RealtimeWorldTime.resetRuntimeState();
     }
 
     public void onWorldLoad(MinecraftServer server, ServerLevel level) {
+        if (activeServer == null) {
+            activeServer = server;
+        }
         reloadConfig(false);
-        ensureDaylightCycleOff(level, server);
-        // Avoid syncing every loaded level immediately. Multiple dimensions often load in a burst;
-        // scheduling the next regular tick prevents repeated full-world scans while still syncing quickly.
+        if (shouldSyncLevel(level)) {
+            gameRules.applyPolicy(level, server, config.daylightRulePolicy);
+            performanceGameruleChecks++;
+        }
         tickCounter = Math.max(0, config.updateInterval - 1);
     }
 
@@ -73,173 +120,220 @@ public final class RealtimeController {
             onServerStarted(server);
             return;
         }
-
         if (!markServerTick(server)) {
+            performanceSkippedUpdates++;
             return;
         }
 
         boolean reloaded = checkConfigReload();
-        if (reloaded) {
-            ensureDaylightCycleOff(server, true);
-        } else {
-            ensureDaylightCycleOff(server, false);
-        }
-
+        manageDaylightRules(server, reloaded);
         if (!config.enabled) {
+            performanceSkippedUpdates++;
+            maybeLogPerformance();
             return;
         }
 
         tickCounter++;
         if (tickCounter < config.updateInterval) {
+            performanceSkippedUpdates++;
+            maybeLogPerformance();
             return;
         }
-
         tickCounter = 0;
         syncServerTime(server);
+        maybeLogPerformance();
     }
 
     private void syncServerTime(MinecraftServer server) {
-        if (!config.enabled) {
+        long startedNanos = timeMath.nowNanos();
+        try {
+            Set<String> sleepingDimensions = sleepingDimensionIds(server);
+            if (!sleepingDimensions.isEmpty()) {
+                if (RealtimeConfig.DAYLIGHT_POLICY_MANAGED.equals(config.daylightRulePolicy)) {
+                    // Re-establish states first so a config reload during sleep cannot leave an
+                    // originally-disabled gamerule stuck off with no ownership record.
+                    for (ServerLevel level : server.getAllLevels()) {
+                        if (shouldSyncLevel(level)) {
+                            gameRules.applyPolicy(level, server, config.daylightRulePolicy);
+                        }
+                    }
+                    gameRules.beginSleepWindow(server);
+                }
+                rulesSuspendedForSleep = true;
+                sleepSkipLogged = logSleepState(sleepingDimensions, sleepSkipLogged);
+                performanceSkippedUpdates++;
+                return;
+            }
+            if (rulesSuspendedForSleep) {
+                gameRules.endSleepWindow(server);
+                rulesSuspendedForSleep = false;
+                manageDaylightRules(server, true);
+            }
+
+            boolean customMode = config.customDayLengthMinutes > 0;
+            long commonCustomTarget = customMode ? calculateCustomTarget(server) : 0L;
+            long realtimeTimeOfDay = customMode ? 0L : timeMath.calculateRealtimeTimeOfDay(config.resolvedZoneId(), config.timeOffsetMinutes);
+            long updateNanos = timeMath.nowNanos();
+            int syncedWorlds = 0;
+
+            for (ServerLevel level : server.getAllLevels()) {
+                String dimensionId = resolveManagedDimensionId(level);
+                if (dimensionId == null || !shouldSyncLevel(dimensionId)) {
+                    continue;
+                }
+                if (sleepingDimensions.contains(dimensionId)) {
+                    continue;
+                }
+
+                long currentAbsolute = RealtimeWorldTime.readDayTime(level);
+                long targetAbsolute = customMode
+                        ? commonCustomTarget
+                        : timeMath.resolveRealtimeAbsoluteTarget(currentAbsolute, realtimeTimeOfDay, config);
+                long appliedAbsolute = targetAbsolute;
+
+                if (!customMode && config.isSmoothSyncMode()) {
+                    long previousNanos = lastSmoothUpdateNanos.getOrDefault(dimensionId, Long.MIN_VALUE);
+                    double elapsedSeconds = timeMath.elapsedSeconds(previousNanos, updateNanos, config.maximumOfflineCatchUpSeconds);
+                    lastSmoothUpdateNanos.put(dimensionId, updateNanos);
+                    RealtimeMath.SmoothState state = smoothStates.computeIfAbsent(dimensionId, ignored -> new RealtimeMath.SmoothState());
+                    appliedAbsolute = timeMath.calculateSmoothAbsoluteTicks(currentAbsolute, targetAbsolute, elapsedSeconds, config, state);
+                    if (timeMath.isPausedLargeJump(currentAbsolute, targetAbsolute, config)
+                            && largeJumpWarnings.add(dimensionId)) {
+                        logger.warn("Time synchronization for {} is paused because the target differs by more than one Minecraft day. Set smoothLargeJumpPolicy=GRADUAL or SNAP after checking the host clock.", dimensionId);
+                    }
+                }
+
+                if (RealtimeWorldTime.setDayTime(level, appliedAbsolute, logger)) {
+                    syncedWorlds++;
+                }
+            }
+
+            if (syncedWorlds > 0) {
+                lastSuccessfulUpdate = timeMath.now();
+            }
+            if (config.debugLogging) {
+                logger.info("RealtimeSync updated {} dimension(s); targetTimeOfDay={}, customMode={}.", syncedWorlds, realtimeTimeOfDay, customMode);
+            }
+            sleepSkipLogged = false;
+            performanceUpdates++;
+        } catch (RuntimeException exception) {
+            logger.error("Failed to synchronize Minecraft dayTime.", exception);
+        } finally {
+            long duration = Math.max(0L, timeMath.nowNanos() - startedNanos);
+            performanceTotalNanos += duration;
+            performanceMaxNanos = Math.max(performanceMaxNanos, duration);
+        }
+    }
+
+    private long calculateCustomTarget(MinecraftServer server) {
+        initializeCustomClockIfNeeded(server);
+        long current = RealtimeWorldTime.readOverworldTime(server);
+        return timeMath.calculateCustomAbsoluteTicks(current, config.customDayLengthMinutes, config.maximumOfflineCatchUpSeconds);
+    }
+
+    private void initializeCustomClockIfNeeded(MinecraftServer server) {
+        if (customClockInitialized || config.customDayLengthMinutes <= 0) {
             return;
         }
+        long current = RealtimeWorldTime.readOverworldTime(server);
+        double initial = current;
 
-        try {
-            boolean customDayLengthMode = config.customDayLengthMinutes > 0;
-            long targetTicks = customDayLengthMode
-                    ? timeMath.calculateCustomTicks(readOverworldTime(server), config.customDayLengthMinutes)
-                    : timeMath.calculateRealtimeTicks(config.offsetHours);
-
-            int syncedWorlds = applyTime(server, targetTicks, customDayLengthMode);
-
-            if (config.debugLogging) {
-                logger.info("Synced {} world(s) toward {} ticks. Mode: {}, effectiveSync: {}.",
-                        syncedWorlds,
-                        targetTicks,
-                        customDayLengthMode ? "custom-day-length" : "real-time",
-                        customDayLengthMode ? "direct-custom-clock" : config.syncMode);
-            }
-        } catch (RuntimeException exception) {
-            logger.error("Failed to synchronize Minecraft time.", exception);
-        }
-    }
-
-    private long readOverworldTime(MinecraftServer server) {
-        return RealtimeWorldTime.readOverworldTime(server);
-    }
-
-    private int applyTime(MinecraftServer server, long targetTicks, boolean customDayLengthMode) {
-        int syncedWorlds = 0;
-        Set<String> sleepingDimensions = sleepingDimensionIds(server);
-        boolean skippedForSleep = false;
-
-        for (ServerLevel level : server.getAllLevels()) {
-            if (!shouldSyncLevel(level)) {
-                continue;
-            }
-
-            String dimensionId = dimensionId(level);
-            if (sleepingDimensions.contains(dimensionId)) {
-                skippedForSleep = true;
-                continue;
-            }
-
-            // customDayLengthMinutes already produces a smooth, deterministic clock.
-            // Applying realtime catch-up smoothing on top of it changes the requested
-            // day length and can make short/custom days appear almost frozen.
-            long ticksToApply = !customDayLengthMode && config.isSmoothSyncMode()
-                    ? timeMath.calculateSmoothTicks(
-                            RealtimeWorldTime.readDayTimeOrFallback(level, targetTicks),
-                            targetTicks,
-                            config.maxSmoothStepTicks,
-                            config.smoothSnapThresholdTicks,
-                            config.smoothCatchupDivisor
-                    )
-                    : targetTicks;
-            if (RealtimeWorldTime.setDayTime(server, level, ticksToApply, logger)) {
-                syncedWorlds++;
+        if (RealtimeConfig.CUSTOM_RESTART_RESET_TO_CONFIGURED_TIME.equals(config.customClockRestartPolicy)) {
+            initial = AbsoluteDayTime.compose(AbsoluteDayTime.dayIndex(current), 0L);
+        } else if (RealtimeConfig.CUSTOM_RESTART_PERSIST_REAL_ELAPSED.equals(config.customClockRestartPolicy)) {
+            RealtimePersistentState.Snapshot snapshot = RealtimePersistentState.load(statePath, logger);
+            if (snapshot != null) {
+                long elapsedSeconds = Math.max(0L, Duration.between(snapshot.savedAt(), timeMath.now()).getSeconds());
+                elapsedSeconds = Math.min(elapsedSeconds, config.maximumOfflineCatchUpSeconds);
+                double ticksPerSecond = AbsoluteDayTime.TICKS_PER_DAY / (config.customDayLengthMinutes * 60.0D);
+                initial = snapshot.customAbsoluteTicks() + elapsedSeconds * ticksPerSecond;
             }
         }
 
-        if (config.debugLogging && skippedForSleep && !sleepSkipLogged) {
-            logger.info("Skipping time sync while players are sleeping. Set overrideSleepTime=true to force sync during sleep.");
-        }
-        sleepSkipLogged = skippedForSleep;
-
-        return syncedWorlds;
+        timeMath.initializeCustomClock(initial, timeMath.nowNanos());
+        customClockInitialized = true;
     }
 
-    private boolean shouldSyncLevel(ServerLevel level) {
-        String dimensionId = dimensionId(level);
-        if (config.ignoredDimensionSet().contains(dimensionId)) {
-            return false;
+    private void persistCustomClockIfNeeded() {
+        if (customClockInitialized
+                && config.customDayLengthMinutes > 0
+                && RealtimeConfig.CUSTOM_RESTART_PERSIST_REAL_ELAPSED.equals(config.customClockRestartPolicy)) {
+            RealtimePersistentState.save(statePath, timeMath.customClockValue(), timeMath.now(), logger);
         }
-        if (!config.syncDimensionSet().isEmpty()) {
-            return config.syncDimensionSet().contains(dimensionId);
-        }
-        if (config.syncAllWorlds) {
-            return true;
-        }
-        return OVERWORLD_DIMENSION_ID.equals(dimensionId);
-    }
-
-    private String dimensionId(ServerLevel level) {
-        return RealtimeWorldTime.dimensionId(level);
     }
 
     private Set<String> sleepingDimensionIds(MinecraftServer server) {
         if (!config.respectSleep || config.overrideSleepTime) {
-            sleepSkipLogged = false;
             return Set.of();
         }
-
-        Set<String> sleepingDimensions = new HashSet<>();
+        Set<String> sleeping = new HashSet<>();
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             if (player.isSleeping() && player.level() instanceof ServerLevel level) {
-                sleepingDimensions.add(dimensionId(level));
+                String dimensionId = resolveManagedDimensionId(level);
+                if (dimensionId != null && shouldSyncLevel(dimensionId)) {
+                    sleeping.add(dimensionId);
+                }
             }
         }
-
-        return sleepingDimensions;
+        return sleeping;
     }
 
-    private void ensureDaylightCycleOff(ServerLevel level, MinecraftServer server) {
-        if (!config.enabled || !config.forceDaylightCycleOff || !shouldSyncLevel(level)) {
-            return;
+    private boolean logSleepState(Set<String> sleepingDimensions, boolean wasLogged) {
+        if (sleepingDimensions.isEmpty()) {
+            return false;
         }
-
-        if (!gameRules.disableDaylightCycle(level, server)) {
-            RealtimeWorldTime.pauseClock(server, level, logger);
+        if (config.debugLogging && !wasLogged) {
+            logger.info("RealtimeSync suspended managed daylight rules and skipped time writes in sleeping dimensions: {}", sleepingDimensions);
         }
+        return true;
     }
 
-    private void ensureDaylightCycleOff(MinecraftServer server, boolean force) {
-        if (!config.enabled || !config.forceDaylightCycleOff) {
-            return;
-        }
-
+    private void manageDaylightRules(MinecraftServer server, boolean force) {
         if (!force) {
             daylightRuleGuardTickCounter++;
             if (daylightRuleGuardTickCounter < DAYLIGHT_RULE_GUARD_INTERVAL_TICKS) {
                 return;
             }
         }
-
         daylightRuleGuardTickCounter = 0;
+
+        if (!config.enabled || RealtimeConfig.DAYLIGHT_POLICY_IGNORE.equals(config.daylightRulePolicy)) {
+            gameRules.restoreAll(server);
+            return;
+        }
+
         for (ServerLevel level : server.getAllLevels()) {
-            if (shouldSyncLevel(level) && !gameRules.disableDaylightCycle(level, server)) {
-                RealtimeWorldTime.pauseClock(server, level, logger);
+            if (shouldSyncLevel(level)) {
+                gameRules.applyPolicy(level, server, config.daylightRulePolicy);
+                performanceGameruleChecks++;
             }
         }
     }
 
-    private void resetRuntimeState() {
-        tickCounter = 0;
-        configReloadTickCounter = 0;
-        daylightRuleGuardTickCounter = 0;
-        sleepSkipLogged = false;
-        lastProcessedServerTick = RealtimeServerState.UNKNOWN_TICK;
-        timeMath.resetCustomTicks();
-        gameRules.resetWarningState();
+    private boolean shouldSyncLevel(ServerLevel level) {
+        String dimensionId = resolveManagedDimensionId(level);
+        return dimensionId != null && shouldSyncLevel(dimensionId);
+    }
+
+    private boolean shouldSyncLevel(String dimensionId) {
+        if (config.ignoredDimensionSet().contains(dimensionId)) {
+            return false;
+        }
+        if (!config.syncDimensionSet().isEmpty()) {
+            return config.syncDimensionSet().contains(dimensionId);
+        }
+        return config.syncAllWorlds || OVERWORLD_DIMENSION_ID.equals(dimensionId);
+    }
+
+    private String resolveManagedDimensionId(ServerLevel level) {
+        String dimensionId = RealtimeWorldTime.dimensionId(level);
+        if (dimensionId == null) {
+            String key = level.getClass().getName();
+            if (unresolvedDimensionWarnings.add(key)) {
+                logger.warn("Skipping a dimension because its ResourceKey identifier could not be resolved; it will not be treated as the Overworld.");
+            }
+        }
+        return dimensionId;
     }
 
     private boolean markServerTick(MinecraftServer server) {
@@ -247,11 +341,9 @@ public final class RealtimeController {
         if (serverTick == RealtimeServerState.UNKNOWN_TICK) {
             return true;
         }
-
         if (serverTick == lastProcessedServerTick) {
             return false;
         }
-
         lastProcessedServerTick = serverTick;
         return true;
     }
@@ -261,43 +353,182 @@ public final class RealtimeController {
         if (configReloadTickCounter < CONFIG_RELOAD_CHECK_INTERVAL_TICKS) {
             return false;
         }
-
         configReloadTickCounter = 0;
         return reloadConfig(false);
     }
 
     private boolean reloadConfig(boolean force) {
-        long modifiedTime = readModifiedTime(configPath);
-        if (!force && modifiedTime == configLastModified) {
+        ConfigFingerprint currentFingerprint = fingerprint(configPath);
+        if (!force && currentFingerprint.equals(configFingerprint)) {
             return false;
         }
 
-        config = RealtimeConfig.loadOrCreate(configPath, legacyConfigPath, logger);
-        configLastModified = readModifiedTime(configPath);
-        tickCounter = Math.min(tickCounter, Math.max(0, config.updateInterval - 1));
-        daylightRuleGuardTickCounter = DAYLIGHT_RULE_GUARD_INTERVAL_TICKS;
-        sleepSkipLogged = false;
-        lastProcessedServerTick = RealtimeServerState.UNKNOWN_TICK;
-        timeMath.resetCustomTicks();
-        gameRules.resetWarningState();
+        RealtimeConfig previous = config;
+        RealtimeConfig loaded = force
+                ? RealtimeConfig.loadOrCreate(configPath, legacyConfigPath, logger)
+                : RealtimeConfig.reload(configPath, config, logger);
+        configFingerprint = fingerprint(configPath);
+        if (loaded == previous && !force) {
+            return false;
+        }
+        config = loaded;
+        lastConfigReload = timeMath.now();
+        performanceConfigReloads++;
 
-        if (!force) {
-            logger.info("RealtimeSync config reloaded.");
+        if (activeServer != null
+                && (previous.enabled && !config.enabled
+                || RealtimeConfig.DAYLIGHT_POLICY_MANAGED.equals(previous.daylightRulePolicy)
+                && !RealtimeConfig.DAYLIGHT_POLICY_MANAGED.equals(config.daylightRulePolicy))) {
+            gameRules.restoreAll(activeServer);
+        }
+        if (previous.customDayLengthMinutes != config.customDayLengthMinutes
+                || !previous.customClockRestartPolicy.equals(config.customClockRestartPolicy)) {
+            persistCustomClockIfNeeded();
+            customClockInitialized = false;
+            timeMath.resetCustomClock();
+        }
+        if (!previous.dayProgressionPolicy.equals(config.dayProgressionPolicy)
+                || !previous.zoneId.equals(config.zoneId)
+                || previous.timeOffsetMinutes != config.timeOffsetMinutes) {
+            timeMath.resetRealtimeAnchor();
         }
 
+        tickCounter = Math.min(tickCounter, Math.max(0, config.updateInterval - 1));
+        daylightRuleGuardTickCounter = DAYLIGHT_RULE_GUARD_INTERVAL_TICKS;
+        lastProcessedServerTick = RealtimeServerState.UNKNOWN_TICK;
+        smoothStates.clear();
+        lastSmoothUpdateNanos.clear();
+        largeJumpWarnings.clear();
+        if (!force) {
+            logger.info("RealtimeSync config reloaded successfully.");
+        }
         return true;
     }
 
-    private long readModifiedTime(Path path) {
-        if (!Files.exists(path)) {
-            return -1L;
+    public List<String> statusLines(MinecraftServer server) {
+        List<String> lines = new ArrayList<>();
+        List<String> activeDimensions = new ArrayList<>();
+        ServerLevel reference = null;
+        for (ServerLevel level : server.getAllLevels()) {
+            String dimensionId = resolveManagedDimensionId(level);
+            if (dimensionId != null && shouldSyncLevel(dimensionId)) {
+                activeDimensions.add(dimensionId);
+                if (reference == null || OVERWORLD_DIMENSION_ID.equals(dimensionId)) {
+                    reference = level;
+                }
+            }
         }
 
+        long currentAbsolute = reference == null ? 0L : RealtimeWorldTime.readDayTimeOrFallback(reference, 0L);
+        long targetAbsolute;
+        if (config.customDayLengthMinutes > 0) {
+            targetAbsolute = customClockInitialized ? (long) Math.floor(timeMath.customClockValue()) : currentAbsolute;
+        } else {
+            long targetTimeOfDay = timeMath.calculateRealtimeTimeOfDay(config.resolvedZoneId(), config.timeOffsetMinutes);
+            targetAbsolute = timeMath.resolveRealtimeAbsoluteTarget(currentAbsolute, targetTimeOfDay, config);
+        }
+
+        lines.add("RealtimeSync status");
+        lines.add("enabled=" + config.enabled
+                + ", mode=" + (config.customDayLengthMinutes > 0 ? "custom-day-length" : config.syncMode)
+                + ", zoneId=" + config.resolvedZoneId().getId());
+        lines.add("currentAbsoluteDayTime=" + currentAbsolute
+                + ", dayIndex=" + AbsoluteDayTime.dayIndex(currentAbsolute)
+                + ", timeOfDay=" + AbsoluteDayTime.timeOfDay(currentAbsolute));
+        lines.add("targetAbsoluteDayTime=" + targetAbsolute
+                + ", targetDayIndex=" + AbsoluteDayTime.dayIndex(targetAbsolute)
+                + ", targetTimeOfDay=" + AbsoluteDayTime.timeOfDay(targetAbsolute));
+        lines.add("dimensions=" + activeDimensions);
+        lines.add("daylightRulePolicy=" + config.daylightRulePolicy
+                + ", gamerule=" + (reference == null ? "no-managed-dimension" : gameRules.describeState(reference)));
+        lines.add("gameruleAdapter=" + gameRules.adapterName()
+                + ", dimensionAdapter=" + RealtimeWorldTime.dimensionAdapterName()
+                + ", commandPermissionAdapter=" + RealtimeStatusCommand.permissionAdapterName());
+        lines.add("lastSuccessfulUpdate=" + formatInstant(lastSuccessfulUpdate)
+                + ", lastConfigReload=" + formatInstant(lastConfigReload));
+        return List.copyOf(lines);
+    }
+
+    private static String formatInstant(Instant instant) {
+        return instant == null ? "never" : instant.toString();
+    }
+
+    private void resetRuntimeState(boolean clearGameRuleOwnership) {
+        tickCounter = 0;
+        configReloadTickCounter = 0;
+        daylightRuleGuardTickCounter = 0;
+        sleepSkipLogged = false;
+        rulesSuspendedForSleep = false;
+        lastProcessedServerTick = RealtimeServerState.UNKNOWN_TICK;
+        customClockInitialized = false;
+        lastSuccessfulUpdate = null;
+        if (clearGameRuleOwnership) {
+            lastConfigReload = null;
+        }
+        timeMath.resetCustomClock();
+        timeMath.resetRealtimeAnchor();
+        smoothStates.clear();
+        lastSmoothUpdateNanos.clear();
+        unresolvedDimensionWarnings.clear();
+        largeJumpWarnings.clear();
+        resetPerformanceWindow();
+        if (clearGameRuleOwnership) {
+            gameRules.clearRuntimeState();
+        }
+    }
+
+    private void maybeLogPerformance() {
+        if (!config.debugPerformanceLogging) {
+            return;
+        }
+        long now = timeMath.nowNanos();
+        if (performanceWindowStartNanos == 0L) {
+            performanceWindowStartNanos = now;
+            return;
+        }
+        if (now - performanceWindowStartNanos < PERFORMANCE_LOG_INTERVAL_NANOS) {
+            return;
+        }
+        long averageMicros = performanceUpdates == 0L ? 0L : performanceTotalNanos / performanceUpdates / 1_000L;
+        logger.info("RealtimeSync performance: updates={}, skipped={}, avgMicros={}, maxMicros={}, activeDimensions={}, configReloads={}, gameruleChecks={}.",
+                performanceUpdates,
+                performanceSkippedUpdates,
+                averageMicros,
+                performanceMaxNanos / 1_000L,
+                smoothStates.size(),
+                performanceConfigReloads,
+                performanceGameruleChecks);
+        resetPerformanceWindow();
+    }
+
+    private void resetPerformanceWindow() {
+        performanceWindowStartNanos = 0L;
+        performanceUpdates = 0L;
+        performanceSkippedUpdates = 0L;
+        performanceTotalNanos = 0L;
+        performanceMaxNanos = 0L;
+        performanceConfigReloads = 0L;
+        performanceGameruleChecks = 0L;
+    }
+
+    private ConfigFingerprint fingerprint(Path path) {
+        if (!Files.exists(path)) {
+            return ConfigFingerprint.missing();
+        }
         try {
-            return Files.getLastModifiedTime(path).toMillis();
+            byte[] content = Files.readAllBytes(path);
+            CRC32 crc = new CRC32();
+            crc.update(content);
+            return new ConfigFingerprint(Files.getLastModifiedTime(path).toMillis(), content.length, crc.getValue());
         } catch (IOException exception) {
-            logger.warn("Failed to read RealtimeSync config timestamp. {}", exception.getMessage());
-            return -1L;
+            logger.warn("Could not fingerprint RealtimeSync config. {}", exception.getMessage());
+            return ConfigFingerprint.missing();
+        }
+    }
+
+    private record ConfigFingerprint(long modifiedMillis, long size, long crc32) {
+        private static ConfigFingerprint missing() {
+            return new ConfigFingerprint(-1L, -1L, -1L);
         }
     }
 }

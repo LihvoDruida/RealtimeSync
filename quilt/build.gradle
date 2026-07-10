@@ -10,8 +10,18 @@ if (!rootProject.ext.isLoaderEnabled('quilt')) {
 
 apply plugin: 'net.fabricmc.fabric-loom-remap'
 
+def archiveBaseName = "${archives_base_name}-quilt-${minecraft_version}"
+def resourceValues = [
+        version: version.toString(),
+        loader_version: loader_version.toString(),
+        fabric_version: fabric_version.toString(),
+        minecraft_version_range_fabric: minecraft_version_range_fabric.toString(),
+        java_version: java_version.toString()
+]
+def licenseArchiveName = "LICENSE_${archiveBaseName}"
+
 base {
-    archivesName = "${project.archives_base_name}-quilt-${project.minecraft_version}"
+    archivesName = archiveBaseName
 }
 
 sourceSets.main.java.srcDir(rootProject.file('common/src/main/java'))
@@ -23,9 +33,9 @@ configurations.configureEach {
     resolutionStrategy.componentSelection {
         all { selection ->
             if (selection.candidate.group == 'net.fabricmc.fabric-api' && selection.candidate.module == 'fabric-api') {
-                String requiredSuffix = "+${project.minecraft_version}"
+                String requiredSuffix = "+${minecraft_version}"
                 if (!selection.candidate.version.endsWith(requiredSuffix)) {
-                    selection.reject("Fabric API must match Minecraft ${project.minecraft_version}")
+                    selection.reject("Fabric API must match Minecraft ${minecraft_version}")
                 }
             }
         }
@@ -33,42 +43,29 @@ configurations.configureEach {
 }
 
 dependencies {
-    minecraft "com.mojang:minecraft:${project.minecraft_version}"
-
-    // Minecraft 1.21.x uses Loom Remap with Mojang official mappings.
+    minecraft "com.mojang:minecraft:${minecraft_version}"
     mappings loom.officialMojangMappings()
-    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+    modImplementation "net.fabricmc:fabric-loader:${loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
 }
 
-processResources {
-    inputs.property 'version', project.version
-    inputs.property 'loader_version', project.loader_version
-    inputs.property 'fabric_version', project.fabric_version
-    inputs.property 'minecraft_version_range_fabric', project.minecraft_version_range_fabric
-    inputs.property 'java_version', project.java_version
-
+tasks.named('processResources', ProcessResources) {
+    inputs.properties resourceValues
     filesMatching('fabric.mod.json') {
-        expand(
-                version: project.version,
-                loader_version: project.loader_version,
-                fabric_version: project.fabric_version,
-                minecraft_version_range_fabric: project.minecraft_version_range_fabric,
-                java_version: project.java_version
-        )
+        expand(resourceValues)
     }
 }
 
-jar {
+tasks.named('jar', Jar) {
     from(rootProject.file('LICENSE')) {
-        rename { "${it}_${project.base.archivesName.get()}" }
+        rename { licenseArchiveName }
     }
 }
 
 publishing {
     publications {
         create('mavenJava', MavenPublication) {
-            artifactId = project.base.archivesName.get()
+            artifactId = archiveBaseName
             from components.java
         }
     }

@@ -10,16 +10,24 @@ if (!rootProject.ext.isLoaderEnabled('forge')) {
 
 apply plugin: 'net.minecraftforge.gradle'
 
+def archiveBaseName = "${archives_base_name}-forge-${minecraft_version}"
+def resourceValues = [
+        version: version.toString(),
+        forge_loader_version: forge_loader_version.toString(),
+        minecraft_version_range: minecraft_version_range_mods_toml.toString()
+]
+def licenseArchiveName = "LICENSE_${archiveBaseName}"
+def implementationVersion = version.toString()
+def implementationTitle = name.toString()
+
 base {
-    archivesName = "${project.archives_base_name}-forge-${project.minecraft_version}"
+    archivesName = archiveBaseName
 }
 
 sourceSets.main.java.srcDir(rootProject.file('common/src/main/java'))
 sourceSets.main.resources.srcDir(rootProject.file('common/src/main/resources'))
 
 repositories {
-    // ForgeGradle 7 exposes these repository helpers after the plugin is applied.
-    // They avoid missing userdev/Minecraft library artifacts on newer 1.21.x lines.
     maven minecraft.mavenizer
     maven fg.forgeMaven
     maven fg.minecraftLibsMaven
@@ -27,58 +35,41 @@ repositories {
 }
 
 minecraft {
-    mappings channel: 'official', version: project.minecraft_version
-
+    mappings channel: 'official', version: minecraft_version
     runs {
         configureEach {
-            // ForgeGradle 7 uses the workingDir property. The old workingDirectory(...)
-            // method from older MDKs fails on SlimeLauncherOptionsImpl.
             workingDir.convention(layout.projectDirectory.dir('run'))
             systemProperty 'forge.logging.markers', 'REGISTRIES'
             systemProperty 'forge.logging.console.level', 'info'
         }
-
         register('client')
-
-        register('server') {
-            args '--nogui'
-        }
+        register('server') { args '--nogui' }
     }
 }
 
 dependencies {
-    // ForgeGradle 7 resolves userdev through minecraft.dependency(...), not the old
-    // minecraft configuration notation used by ForgeGradle 6-era MDKs.
-    implementation minecraft.dependency("net.minecraftforge:forge:${project.minecraft_version}-${project.forge_version}")
+    implementation minecraft.dependency("net.minecraftforge:forge:${minecraft_version}-${forge_version}")
 }
 
-processResources {
-    inputs.property 'version', project.version
-    inputs.property 'forge_loader_version', project.forge_loader_version
-    inputs.property 'minecraft_version_range_mods_toml', project.minecraft_version_range_mods_toml
+tasks.named('processResources', ProcessResources) {
+    inputs.properties resourceValues
     filesMatching('META-INF/mods.toml') {
-        expand(
-                version: project.version,
-                forge_loader_version: project.forge_loader_version,
-                minecraft_version_range: project.minecraft_version_range_mods_toml
-        )
+        expand(resourceValues)
     }
 }
 
-jar {
+tasks.named('jar', Jar) {
     from(rootProject.file('LICENSE')) {
-        rename { "${it}_${project.base.archivesName.get()}" }
+        rename { licenseArchiveName }
     }
-
     manifest {
         attributes([
-                'Specification-Title'     : 'RealtimeSync',
-                'Specification-Vendor'    : 'melles1991',
-                'Specification-Version'   : project.version,
-                'Implementation-Title'    : project.name,
-                'Implementation-Version'  : project.jar.archiveVersion,
-                'Implementation-Vendor'   : 'melles1991',
-                'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+                'Specification-Title'    : 'RealtimeSync',
+                'Specification-Vendor'   : 'melles1991',
+                'Specification-Version'  : implementationVersion,
+                'Implementation-Title'   : implementationTitle,
+                'Implementation-Version' : implementationVersion,
+                'Implementation-Vendor'  : 'melles1991'
         ])
     }
 }
@@ -86,7 +77,7 @@ jar {
 publishing {
     publications {
         create('mavenJava', MavenPublication) {
-            artifactId = project.base.archivesName.get()
+            artifactId = archiveBaseName
             from components.java
         }
     }

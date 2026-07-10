@@ -112,12 +112,13 @@ CurseForge publishing uses the exact Minecraft version from the selected profile
 
 ## Runtime guardrails
 
-The runtime intentionally avoids direct APIs that changed across the active `1.21.x` profile range:
+- `dayTime` remains absolute; writing `gameTime` or reducing values modulo 24000 is forbidden.
+- Minecraft 1.21–1.21.10 and 1.21.11 compile different GameRules adapters.
+- Minecraft 26.x `time of` commands are forbidden on this branch.
+- Fabric/Quilt-compatible, Forge, and NeoForge all use official server lifecycle/tick events.
+- Source archives are rejected when they contain generated build directories, compiled classes, non-wrapper jars, cache files, or reports.
 
-- no direct `GameRules` imports in loader entrypoints;
-- no direct `.getGameRules()` calls outside the reflection helper;
-- no direct day-time calls outside `RealtimeWorldTime`;
-- Fabric/Quilt startup stays on `ServerTickEvents.END_SERVER_TICK`.
+Run `bash scripts/verify-build-matrix.sh` before release. It enforces these invariants in addition to dependency/profile checks.
 
 ## Compatibility lock and supported matrix
 

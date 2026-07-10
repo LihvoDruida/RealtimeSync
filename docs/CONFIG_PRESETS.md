@@ -1,70 +1,84 @@
 # RealtimeSync configuration presets
 
-## Recommended: realistic-smooth
-
-Best default for public survival servers. The sky follows the real clock smoothly, avoids visible jumps, does not fight sleep, and only controls the Overworld by default.
+## Recommended: realistic smooth
 
 ```properties
 enabled=true
-forceDaylightCycleOff=true
+daylightRulePolicy=MANAGED
+dayProgressionPolicy=PRESERVE_MONOTONIC
+zoneId=system
+timeOffsetMinutes=0
 syncAllWorlds=false
 syncDimensions=minecraft:overworld
 ignoredDimensions=
 syncMode=smooth
 updateInterval=20
-maxSmoothStepTicks=12
-smoothSnapThresholdTicks=2
+smoothMaxCorrectionTicksPerSecond=1200
+smoothSnapThresholdTicks=20
 smoothCatchupDivisor=240
+smoothLargeJumpPolicy=GRADUAL
+maximumOfflineCatchUpSeconds=300
 respectSleep=true
 overrideSleepTime=false
-offsetHours=0
 customDayLengthMinutes=0
+customClockRestartPolicy=CONTINUE_FROM_WORLD
 debugLogging=false
+debugPerformanceLogging=false
 ```
 
 ## Ultra-smooth
 
-Use when visual smoothness matters more than fast catch-up after downtime.
+Use a lower real-time correction ceiling. The result remains independent of server TPS.
 
 ```properties
 syncMode=smooth
 updateInterval=20
-maxSmoothStepTicks=6
-smoothSnapThresholdTicks=1
+smoothMaxCorrectionTicksPerSecond=120
+smoothSnapThresholdTicks=4
 smoothCatchupDivisor=360
+smoothLargeJumpPolicy=GRADUAL
 ```
 
 ## Faster catch-up
 
-Use when the server is often stopped for long periods and you want it to catch up faster after boot.
-
 ```properties
 syncMode=smooth
 updateInterval=20
-maxSmoothStepTicks=24
-smoothSnapThresholdTicks=2
+smoothMaxCorrectionTicksPerSecond=2400
+smoothSnapThresholdTicks=20
 smoothCatchupDivisor=120
+smoothLargeJumpPolicy=GRADUAL
+maximumOfflineCatchUpSeconds=300
 ```
+
+## Pause on suspicious host-clock jumps
+
+```properties
+syncMode=smooth
+smoothLargeJumpPolicy=PAUSE_AND_WARN
+```
+
+A difference larger than one Minecraft day is not applied until the host clock or policy is corrected.
 
 ## Custom 40-minute Minecraft day
 
-Use when you want the Minecraft day/night cycle to keep moving independently from the real clock.
-
 ```properties
-forceDaylightCycleOff=true
+daylightRulePolicy=MANAGED
 updateInterval=20
 customDayLengthMinutes=40
+customClockRestartPolicy=CONTINUE_FROM_WORLD
+maximumOfflineCatchUpSeconds=300
 ```
 
-`updateInterval` is not the day length. It is only the sync frequency in Minecraft ticks.
-The custom day timer uses real elapsed wall-clock time, so it does not slow down when TPS drops.
-`syncMode` is intentionally ignored in this mode.
+`updateInterval` is only the application frequency. The custom clock uses monotonic real elapsed time and therefore does not slow down with TPS.
 
-## Exact clock / no smoothing
-
-Use only when exact matching matters more than visual movement.
+## Calendar-anchored absolute timeline
 
 ```properties
+dayProgressionPolicy=REAL_DATE_ANCHOR
+zoneId=Europe/Kyiv
+realDateAnchor=2026-01-01
 syncMode=instant
-updateInterval=60
 ```
+
+This policy intentionally derives the absolute Minecraft day index from the configured calendar anchor. Switching an existing world to it can produce a large one-time absolute `dayTime` change.

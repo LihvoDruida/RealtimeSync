@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import json
 import re
 from pathlib import Path
@@ -34,7 +35,13 @@ def require(props: dict[str, str], path: Path, key: str) -> str:
     return props[key]
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Validate RealtimeSync build profiles and compatibility lock.")
+    return parser.parse_args()
+
+
 def main() -> int:
+    parse_args()
     if not LOCK_PATH.is_file():
         fail(f"Missing compatibility lock: {LOCK_PATH}")
 
@@ -159,10 +166,10 @@ def main() -> int:
 
     for gradle_file in (ROOT / "fabric/build.gradle", ROOT / "quilt/build.gradle"):
         content = gradle_file.read_text(encoding="utf-8")
-        if "inputs.property 'fabric_version', project.fabric_version" not in content:
-            fail(f"{gradle_file}: processResources must track fabric_version")
-        if "fabric_version: project.fabric_version" not in content:
-            fail(f"{gradle_file}: processResources must expand fabric_version into fabric.mod.json")
+        if "inputs.properties resourceValues" not in content:
+            fail(f"{gradle_file}: processResources must track immutable resourceValues")
+        if "fabric_version: fabric_version.toString()" not in content:
+            fail(f"{gradle_file}: resourceValues must expand fabric_version into fabric.mod.json")
 
     neoforge_toml = (ROOT / "neoforge/src/main/resources/META-INF/neoforge.mods.toml").read_text(encoding="utf-8")
     if 'loaderVersion="[1,)"' not in neoforge_toml:

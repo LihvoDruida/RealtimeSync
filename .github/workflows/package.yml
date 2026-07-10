@@ -47,6 +47,14 @@ jobs:
         shell: bash
         run: python3 scripts/validate-dependency-artifacts.py
 
+      - name: Run core unit tests
+        shell: bash
+        run: bash scripts/run-core-tests.sh
+
+      - name: Validate source tree cleanliness
+        shell: bash
+        run: python3 scripts/validate-source-tree.py
+
       - name: Verify build matrix guardrails
         shell: bash
         run: bash scripts/verify-build-matrix.sh
@@ -211,7 +219,7 @@ jobs:
     needs:
       - build-loader
       - prepare-matrix
-    if: ${{ always() && github.ref_type == 'tag' && needs.prepare-matrix.outputs.has_entries == 'true' }}
+    if: ${{ github.ref_type == 'tag' && needs.build-loader.result == 'success' && needs.prepare-matrix.outputs.has_entries == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -256,8 +264,7 @@ jobs:
     needs:
       - build-loader
       - prepare-matrix
-    if: ${{ always() && github.ref_type == 'tag' && needs.prepare-matrix.outputs.has_entries == 'true' }}
-    continue-on-error: true
+    if: ${{ github.ref_type == 'tag' && needs.build-loader.result == 'success' && needs.prepare-matrix.outputs.has_entries == 'true' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.prepare-matrix.outputs.build_matrix) }}
@@ -319,7 +326,7 @@ jobs:
             ${{ steps.versions.outputs.curseforge_java_versions }}
           retry-attempts: 3
           retry-delay: 15000
-          fail-mode: warn
+          fail-mode: fail
 
       - name: CurseForge credentials not configured
         if: env.CURSEFORGE_PROJECT_ID == '' || env.CURSEFORGE_TOKEN == ''

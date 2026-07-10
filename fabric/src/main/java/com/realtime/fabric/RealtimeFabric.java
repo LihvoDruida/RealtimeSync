@@ -5,6 +5,7 @@ import com.realtime.common.RealtimeConstants;
 import com.realtime.common.RealtimeController;
 import com.realtime.common.RealtimeLog;
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.loader.api.FabricLoader;
@@ -24,8 +25,8 @@ public final class RealtimeFabric implements ModInitializer {
         Path configDir = FabricLoader.getInstance().getConfigDir();
         controller = new RealtimeController(configDir, LOG);
 
-        // Keep Fabric/Quilt entrypoints on the stable server tick event and let the common
-        // controller perform startup/world daylight guards on the first server tick.
+        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> controller.registerCommands(dispatcher));
+        ServerLifecycleEvents.SERVER_STARTED.register(controller::onServerStarted);
         ServerTickEvents.END_SERVER_TICK.register(controller::onServerTick);
         ServerLifecycleEvents.SERVER_STOPPED.register(controller::onServerStopped);
 

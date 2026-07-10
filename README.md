@@ -45,82 +45,80 @@ Do **not** upload one universal jar for every loader. Publish the correct jar fo
 
 ## Configuration
 
-The config file is shared between all loaders:
+All loaders use the same UTF-8 configuration file:
 
 ```txt
 config/realtime.properties
 ```
 
-Example realistic-smooth profile:
+Recommended real-time profile:
 
 ```properties
 enabled=true
-forceDaylightCycleOff=true
+daylightRulePolicy=MANAGED
+dayProgressionPolicy=PRESERVE_MONOTONIC
+zoneId=system
+timeOffsetMinutes=0
+realDateAnchor=1970-01-01
+
 syncAllWorlds=false
 syncDimensions=minecraft:overworld
 ignoredDimensions=
 syncMode=smooth
-maxSmoothStepTicks=12
-smoothSnapThresholdTicks=2
+updateInterval=20
+
+smoothMaxCorrectionTicksPerSecond=1200
+smoothSnapThresholdTicks=20
 smoothCatchupDivisor=240
+smoothLargeJumpPolicy=GRADUAL
+maximumOfflineCatchUpSeconds=300
+
+customDayLengthMinutes=0
+customClockRestartPolicy=CONTINUE_FROM_WORLD
 respectSleep=true
 overrideSleepTime=false
-updateInterval=20
-offsetHours=0
-customDayLengthMinutes=0
 debugLogging=false
+debugPerformanceLogging=false
 ```
 
-### Options
+### Important options
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `enabled` | `true` | Enables or disables the mod without removing it. |
-| `forceDaylightCycleOff` | `true` | Keeps vanilla `doDaylightCycle` disabled so the mod controls time cleanly. |
-| `syncAllWorlds` | `false` | Syncs every loaded dimension only when `syncDimensions` is empty and this is `true`. The realistic default is Overworld-only. |
-| `syncDimensions` | `minecraft:overworld` | Comma-separated allowlist of dimensions to sync. Takes priority over `syncAllWorlds`. Default keeps realistic sky movement only in the Overworld. |
-| `ignoredDimensions` | empty | Comma-separated denylist excluded from time sync. Useful for modded/custom dimensions. |
-| `syncMode` | `smooth` | `instant` jumps directly to the target time. `smooth` gradually catches up and avoids visible sun/moon jumps. This affects real-clock sync only; `customDayLengthMinutes > 0` uses its own direct wall-clock timer. |
-| `maxSmoothStepTicks` | `12` | Hard cap for Minecraft ticks changed per sync when `syncMode=smooth`. Lower is smoother; higher catches up faster. |
-| `smoothSnapThresholdTicks` | `2` | If the current time is already this close to the target, snap exactly to prevent tiny jitter. |
-| `smoothCatchupDivisor` | `240` | Adaptive catch-up softness. Higher values are gentler; lower values catch up faster. |
-| `respectSleep` | `true` | Skips time sync while players are sleeping so the mod does not fight sleep mechanics. |
-| `overrideSleepTime` | `false` | Forces sync even while players are sleeping. Overrides `respectSleep`. |
-| `updateInterval` | `20` | Ticks between syncs. `20` ticks = 1 second. The realistic-smooth profile updates once per second. |
-| `offsetHours` | `0` | Shifts real-time sync by `-23..23` hours. |
-| `customDayLengthMinutes` | `0` | `0` means real clock sync. Values above `0` set a custom Minecraft day length in real minutes, based on wall-clock elapsed time instead of server TPS. |
-| `debugLogging` | `false` | Enables verbose sync logs. |
+| `enabled` | `true` | Enables or disables synchronization without removing the mod. |
+| `daylightRulePolicy` | `MANAGED` | `MANAGED` temporarily disables vanilla time advancement and restores the original value when ownership ends. `REQUIRE_OFF` only checks and warns. `IGNORE` never reads or writes the rule. Minecraft 1.21.11 uses `minecraft:advance_time`; older profiles use the legacy daylight rule. |
+| `dayProgressionPolicy` | `PRESERVE_MONOTONIC` | `PRESERVE_MONOTONIC` never lowers absolute `dayTime`; `PRESERVE_CURRENT_DAY` keeps the current day index; `REAL_DATE_ANCHOR` derives an absolute timeline from `realDateAnchor`. |
+| `zoneId` | `system` | IANA timezone such as `Europe/Kyiv`, or `system` to use the host timezone. |
+| `timeOffsetMinutes` | `0` | Additional real-clock offset in minutes. |
+| `realDateAnchor` | `1970-01-01` | Calendar anchor used only by `REAL_DATE_ANCHOR`. |
+| `syncAllWorlds` | `false` | Synchronizes every resolvable loaded dimension only when the allowlist is empty. |
+| `syncDimensions` | `minecraft:overworld` | Comma-separated ResourceLocation allowlist. Unknown identifiers are skipped rather than treated as the Overworld. |
+| `ignoredDimensions` | empty | Comma-separated denylist; it always wins over the allowlist. |
+| `syncMode` | `smooth` | `instant` writes the absolute target directly. `smooth` corrects drift using real elapsed monotonic time instead of assuming 20 TPS. |
+| `updateInterval` | `20` | Server ticks between applications. It controls update frequency, not day length. |
+| `smoothMaxCorrectionTicksPerSecond` | `1200` | Maximum correction speed based on actual elapsed seconds. |
+| `smoothSnapThresholdTicks` | `20` | Snaps very small remaining differences to avoid jitter. |
+| `smoothCatchupDivisor` | `240` | Higher values make adaptive catch-up gentler. |
+| `smoothLargeJumpPolicy` | `GRADUAL` | `GRADUAL`, `SNAP`, or `PAUSE_AND_WARN` for differences larger than one Minecraft day. |
+| `maximumOfflineCatchUpSeconds` | `300` | Caps elapsed time consumed after JVM pauses or server downtime. |
+| `customDayLengthMinutes` | `0` | `0` uses the real clock. Positive values define a custom day duration using monotonic elapsed time. |
+| `customClockRestartPolicy` | `CONTINUE_FROM_WORLD` | `CONTINUE_FROM_WORLD`, `RESET_TO_CONFIGURED_TIME`, or `PERSIST_REAL_ELAPSED`. |
+| `respectSleep` | `true` | Temporarily releases the managed daylight rule and pauses mod writes while a player sleeps, allowing vanilla sleep progression. |
+| `overrideSleepTime` | `false` | Keeps synchronization active during sleep. |
+| `debugLogging` | `false` | Enables detailed functional logs. |
+| `debugPerformanceLogging` | `false` | Emits aggregated 60-second performance summaries rather than per-tick spam. |
 
-> Need a 40-minute Minecraft day? Set `customDayLengthMinutes=40` and keep `updateInterval=20`.
-> Do not use `updateInterval=40` for this; that only changes how often the mod applies the calculated time.
-> In custom day-length mode, `syncMode=smooth` is ignored on purpose because the custom timer is already smooth.
+Legacy keys `forceDaylightCycleOff`, `offsetHours`, `maxSmoothStepTicks`, and `minutesPerMinecraftDay` are read for compatibility and migrated in memory. A legacy `realtime.toml` is parsed only for supported flat keys, backed up as `realtime.toml.bak`, and converted atomically to UTF-8 `realtime.properties`.
 
-See also: `docs/CONFIG_PRESETS.md` for ready-made realistic, ultra-smooth and fast-catch-up presets.
+### Absolute day-time behavior
 
-### Smooth realistic sync
+RealtimeSync writes only `ServerLevel.setDayTime(long)`. It never writes `gameTime`, never truncates the value to `0..23999`, and never executes Minecraft 26.x `time of` commands. This preserves the world day counter, moon phase, scheduled ticks, and unrelated server timers.
 
-The default profile is tuned for realistic and smooth sun/moon movement:
-
-```properties
-syncMode=smooth
-updateInterval=20
-maxSmoothStepTicks=12
-smoothSnapThresholdTicks=2
-smoothCatchupDivisor=240
-```
-
-How it behaves:
-
-- normal tracking updates once per second and stays close to the real clock;
-- small drift snaps only when it is visually unnoticeable;
-- large drift is corrected gradually instead of jumping the sky;
-- `maxSmoothStepTicks=12` means the fastest catch-up is capped and still visually smooth.
-
-For faster catch-up after long server downtime, raise `maxSmoothStepTicks` to `24` or lower `smoothCatchupDivisor` to `120`. For an even calmer sky, use `maxSmoothStepTicks=6` and keep `smoothCatchupDivisor=240`.
+In the vanilla coordinate system, `dayTime=0` corresponds to 06:00. Therefore `REAL_DATE_ANCHOR` keeps a continuous absolute timeline across real midnight and rolls the Minecraft day index when the mapped time crosses tick `0`.
 
 ### Dimension filtering
 
-By default, only the Overworld is synced because Nether and End do not have a normal visible day-night sky.
+By default only the Overworld is synchronized:
 
 ```properties
 syncAllWorlds=false
@@ -128,36 +126,35 @@ syncDimensions=minecraft:overworld
 ignoredDimensions=
 ```
 
-To sync multiple dimensions, use an explicit allowlist:
+Custom dimensions must use exact namespaced identifiers, for example:
 
 ```properties
-syncDimensions=minecraft:overworld,minecraft:the_nether,minecraft:the_end
-ignoredDimensions=some_mod:custom_dimension
+syncDimensions=minecraft:overworld,example:moon
+ignoredDimensions=example:timeless_dimension
 ```
-
-When `syncDimensions` is set, it becomes the allowlist. `ignoredDimensions` always wins and excludes matching dimensions from sync and daylight-cycle gamerule changes.
-
-### Sleep handling
-
-By default, the mod pauses time sync while players are sleeping:
-
-```properties
-respectSleep=true
-overrideSleepTime=false
-```
-
-Set `overrideSleepTime=true` only if the server should keep enforcing realtime/custom time even during sleep.
-
 
 ### Runtime architecture
 
-RealtimeSync keeps loader entrypoints thin. Fabric, Quilt, Forge and NeoForge only connect loader lifecycle events to the shared `common` runtime:
+Loader entrypoints are deliberately thin:
 
-- `RealtimeController` owns config reloads, sync cadence, smooth/instant time application, dimension filtering and sleep-aware sync.
-- `RealtimeGameRules` owns cross-1.21.x daylight gamerule mutation and caches the reflective lookup after the first successful resolution.
-- Loader modules should not duplicate sync math, config polling, GameRules reflection or command-based gamerule changes.
+- Fabric/Quilt-compatible builds use `SERVER_STARTED`, `END_SERVER_TICK`, and `SERVER_STOPPED` lifecycle events.
+- Forge uses the official post-server-tick event; there is no 50 ms background scheduler.
+- NeoForge uses one `ServerTickEvent.Post` per server tick, not one level event per dimension.
+- `RealtimeController` owns cadence, sleep suspension, config reload, persistence, and dimension iteration.
+- `ProfileDaylightRuleAccess` is selected at build time: legacy API for 1.21–1.21.10 and registry-backed `GameRules.ADVANCE_TIME` for 1.21.11.
+- `RealtimeWorldTime` uses direct absolute `dayTime` access, while build-profile dimension adapters call `ResourceKey.location()` on 1.21–1.21.10 and `ResourceKey.identifier()` on 1.21.11.
 
-The daylight cycle gamerule is applied on world/server start, after config reloads and by a low-frequency safety guard. It is not executed through `/gamerule` commands and is not re-resolved through reflection every sync tick.
+### Diagnostics command
+
+Operators can run:
+
+```text
+/realtimesync status
+```
+
+The command reports the mode, timezone, absolute current/target `dayTime`, day index, managed dimensions, gamerule ownership, selected compatibility adapters, and last successful update/reload timestamps. Minecraft 1.21.11 uses the new `PermissionSet` API; older profiles use the legacy level-2 permission check through a build-profile adapter.
+
+See `docs/MIGRATION_1.21X.md`, `docs/COMPATIBILITY.md`, and `docs/CONFIG_PRESETS.md`.
 
 ## Building
 
@@ -270,7 +267,7 @@ For each enabled matrix target the workflow:
 6. Collects all loader artifacts into the GitHub Release on tag builds.
 7. Publishes each loader/version pair to CurseForge in an isolated publish matrix.
 
-CurseForge publish uses `fail-mode: warn` and a separate matrix job, so a temporary CurseForge/Mojang-side publish failure does not block other built loader artifacts.
+CurseForge publish uses `fail-mode: fail`. A failed mandatory publication is visible and fails the corresponding matrix job instead of being silently accepted.
 
 Required secrets for CurseForge publication:
 
@@ -365,4 +362,4 @@ Use `python3 scripts/validate-dependency-artifacts.py --online` when you need to
 
 ### Fabric/Quilt lifecycle compatibility
 
-Fabric/Quilt entrypoints intentionally use only `ServerTickEvents.END_SERVER_TICK`. Do not reintroduce separate world-load lifecycle handling unless all active `1.21.x` Fabric API profiles are verified. The common controller performs initial daylight-cycle guarding and the first sync from the server tick path instead.
+Fabric and the Quilt-compatible artifact use explicit `SERVER_STARTED`, `END_SERVER_TICK`, and `SERVER_STOPPED` events. Startup initializes the selected profile adapter and managed gamerule state; shutdown restores only values still owned by the mod and clears runtime caches.

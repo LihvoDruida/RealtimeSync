@@ -1,107 +1,233 @@
 package com.realtime.common;
 
 import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.Objects;
+import java.util.function.LongSupplier;
 
+/** Time calculations kept independent from Minecraft runtime classes for deterministic tests. */
 public final class RealtimeMath {
-    public static final long TICKS_PER_DAY = 24000L;
-    private static final long SECONDS_PER_DAY = 86400L;
-    private static final long MINECRAFT_DAY_START_SECONDS = 6L * 60L * 60L;
+    public static final long TICKS_PER_DAY = AbsoluteDayTime.TICKS_PER_DAY;
+    private static final long NANOS_PER_DAY = 86_400_000_000_000L;
+    private static final long MINECRAFT_MIDNIGHT_TICK = 18_000L;
     private static final double NANOS_PER_SECOND = 1_000_000_000.0D;
 
-    private final Clock realtimeClock;
+    private final Clock clock;
+    private final LongSupplier nanoTime;
 
-    private double customTicks = 0.0D;
+    private double customAbsoluteTicks;
     private long lastCustomUpdateNanos = Long.MIN_VALUE;
 
     public RealtimeMath() {
-        this(Clock.systemDefaultZone());
+        this(Clock.systemUTC(), System::nanoTime);
     }
 
-    RealtimeMath(Clock realtimeClock) {
-        this.realtimeClock = realtimeClock;
+    RealtimeMath(Clock clock, LongSupplier nanoTime) {
+        this.clock = Objects.requireNonNull(clock, "clock");
+        this.nanoTime = Objects.requireNonNull(nanoTime, "nanoTime");
     }
 
-    public long calculateRealtimeTicks(int offsetHours) {
-        resetCustomTicks();
+    public Instant now() {
+        return clock.instant();
+    }
 
-        LocalTime realTime = ZonedDateTime.now(realtimeClock)
-                .plusHours(offsetHours)
-                .toLocalTime();
+    public long nowNanos() {
+        return nanoTime.getAsLong();
+    }
 
-        long secondsFromMinecraftMorning = Math.floorMod(
-                realTime.toSecondOfDay() - MINECRAFT_DAY_START_SECONDS,
-                SECONDS_PER_DAY
+    public ZonedDateTime currentDateTime(ZoneId zoneId, int offsetMinutes) {
+        return ZonedDateTime.ofInstant(clock.instant(), zoneId).plusMinutes(offsetMinutes);
+    }
+
+    public long calculateRealtimeTimeOfDay(ZoneId zoneId, int offsetMinutes) {
+        return timeOfDayFromLocalTime(currentDateTime(zoneId, offsetMinutes).toLocalTime());
+    }
+
+    static long timeOfDayFromLocalTime(LocalTime realTime) {
+        long ticksSinceRealMidnight = Math.floorDiv(
+                Math.multiplyExact(realTime.toNanoOfDay(), TICKS_PER_DAY),
+                NANOS_PER_DAY
         );
-
-        return Math.floorMod(Math.round(secondsFromMinecraftMorning * (TICKS_PER_DAY / (double) SECONDS_PER_DAY)), TICKS_PER_DAY);
+        return Math.floorMod(ticksSinceRealMidnight + MINECRAFT_MIDNIGHT_TICK, TICKS_PER_DAY);
     }
 
-    public long calculateCustomTicks(long currentOverworldTime, int customDayLengthMinutes) {
-        return calculateCustomTicks(currentOverworldTime, customDayLengthMinutes, System.nanoTime());
+    public long resolveRealtimeAbsoluteTarget(
+            long currentAbsolute,
+            long targetTimeOfDay,
+            RealtimeConfig config
+    ) {
+        if (RealtimeConfig.DAY_PROGRESSION_PRESERVE_CURRENT_DAY.equals(config.dayProgressionPolicy)) {
+            return AbsoluteDayTime.preserveCurrentDay(currentAbsolute, targetTimeOfDay);
+        }
+
+        if (RealtimeConfig.DAY_PROGRESSION_REAL_DATE_ANCHOR.equals(config.dayProgressionPolicy)) {
+            ZonedDateTime realNow = currentDateTime(config.resolvedZoneId(), config.timeOffsetMinutes);
+            long realDay = ChronoUnit.DAYS.between(config.resolvedRealDateAnchor(), realNow.toLocalDate());
+            // Vanilla dayTime tick 0 is 06:00. From 06:00 onward the time-of-day value has wrapped,
+            // so it belongs to the next absolute Minecraft day relative to the local calendar date.
+            long minecraftDay = Math.addExact(realDay, targetTimeOfDay < MINECRAFT_MIDNIGHT_TICK ? 1L : 0L);
+            return AbsoluteDayTime.compose(minecraftDay, targetTimeOfDay);
+        }
+
+        return AbsoluteDayTime.preserveMonotonic(currentAbsolute, targetTimeOfDay);
     }
 
-    long calculateCustomTicks(long currentOverworldTime, int customDayLengthMinutes, long nowNanos) {
+    public long calculateCustomAbsoluteTicks(
+            long currentAbsolute,
+            int customDayLengthMinutes,
+            int maximumCatchUpSeconds
+    ) {
+        return calculateCustomAbsoluteTicks(currentAbsolute, customDayLengthMinutes, maximumCatchUpSeconds, nanoTime.getAsLong());
+    }
+
+    long calculateCustomAbsoluteTicks(
+            long currentAbsolute,
+            int customDayLengthMinutes,
+            int maximumCatchUpSeconds,
+            long nowNanos
+    ) {
         if (customDayLengthMinutes <= 0) {
-            resetCustomTicks();
-            return Math.floorMod(currentOverworldTime, TICKS_PER_DAY);
+            resetCustomClock();
+            return currentAbsolute;
         }
 
         if (lastCustomUpdateNanos == Long.MIN_VALUE) {
-            customTicks = Math.floorMod(currentOverworldTime, TICKS_PER_DAY);
+            customAbsoluteTicks = currentAbsolute;
             lastCustomUpdateNanos = nowNanos;
-            return (long) customTicks;
+            return currentAbsolute;
         }
 
-        long elapsedNanos = Math.max(0L, nowNanos - lastCustomUpdateNanos);
+        long elapsedNanos = nonNegativeElapsed(lastCustomUpdateNanos, nowNanos);
         lastCustomUpdateNanos = nowNanos;
-
-        double secondsPerCustomDay = customDayLengthMinutes * 60.0D;
-        double ticksPerSecond = TICKS_PER_DAY / secondsPerCustomDay;
-        customTicks = wrapTicks(customTicks + (elapsedNanos / NANOS_PER_SECOND) * ticksPerSecond);
-        return (long) customTicks;
-    }
-
-    public long calculateSmoothTicks(long currentDayTime, long targetDayTime, int maxStepTicks, int snapThresholdTicks, int catchupDivisor) {
-        long currentWrapped = Math.floorMod(currentDayTime, TICKS_PER_DAY);
-        long targetWrapped = Math.floorMod(targetDayTime, TICKS_PER_DAY);
-        long delta = shortestDelta(currentWrapped, targetWrapped);
-        long absoluteDelta = Math.abs(delta);
-
-        int safeSnapThreshold = Math.max(0, snapThresholdTicks);
-        if (absoluteDelta <= safeSnapThreshold) {
-            return targetWrapped;
+        double elapsedSeconds = elapsedNanos / NANOS_PER_SECOND;
+        if (maximumCatchUpSeconds >= 0) {
+            elapsedSeconds = Math.min(elapsedSeconds, maximumCatchUpSeconds);
         }
 
-        int safeMaxStep = Math.max(1, maxStepTicks);
-        int safeCatchupDivisor = Math.max(1, catchupDivisor);
-        long adaptiveStep = Math.max(1L, (long) Math.ceil(absoluteDelta / (double) safeCatchupDivisor));
-        long appliedMagnitude = Math.min(safeMaxStep, Math.min(absoluteDelta, adaptiveStep));
-        long appliedDelta = delta > 0 ? appliedMagnitude : -appliedMagnitude;
-
-        return Math.floorMod(currentDayTime + appliedDelta, TICKS_PER_DAY);
+        double ticksPerSecond = TICKS_PER_DAY / (customDayLengthMinutes * 60.0D);
+        customAbsoluteTicks += elapsedSeconds * ticksPerSecond;
+        if (!Double.isFinite(customAbsoluteTicks) || customAbsoluteTicks > Long.MAX_VALUE || customAbsoluteTicks < Long.MIN_VALUE) {
+            customAbsoluteTicks = currentAbsolute;
+        }
+        return (long) Math.floor(customAbsoluteTicks);
     }
 
-    private long shortestDelta(long currentWrapped, long targetWrapped) {
-        long delta = targetWrapped - currentWrapped;
+    public long calculateSmoothAbsoluteTicks(
+            long currentAbsolute,
+            long targetAbsolute,
+            double elapsedSeconds,
+            RealtimeConfig config,
+            SmoothState state
+    ) {
+        long delta = safeSubtract(targetAbsolute, currentAbsolute);
+        long absoluteDelta = safeAbs(delta);
+        int direction = Long.compare(delta, 0L);
+        if (absoluteDelta <= config.smoothSnapThresholdTicks) {
+            state.reset();
+            return targetAbsolute;
+        }
+        if (state.direction != 0 && state.direction != direction) {
+            state.fractionalCorrection = 0.0D;
+        }
+        state.direction = direction;
 
-        if (delta > TICKS_PER_DAY / 2L) {
-            delta -= TICKS_PER_DAY;
-        } else if (delta < -TICKS_PER_DAY / 2L) {
-            delta += TICKS_PER_DAY;
+        if (absoluteDelta > TICKS_PER_DAY) {
+            if (RealtimeConfig.LARGE_JUMP_SNAP.equals(config.smoothLargeJumpPolicy)) {
+                state.reset();
+                return targetAbsolute;
+            }
+            if (RealtimeConfig.LARGE_JUMP_PAUSE_AND_WARN.equals(config.smoothLargeJumpPolicy)) {
+                return currentAbsolute;
+            }
         }
 
-        return delta;
+        double boundedElapsed = Math.max(0.0D, elapsedSeconds);
+        boundedElapsed = Math.min(boundedElapsed, config.maximumOfflineCatchUpSeconds);
+        if (boundedElapsed == 0.0D) {
+            return currentAbsolute;
+        }
+
+        double adaptiveRate = Math.max(1.0D, absoluteDelta / (double) Math.max(1, config.smoothCatchupDivisor));
+        double correctionRate = Math.min(config.smoothMaxCorrectionTicksPerSecond, adaptiveRate);
+        double available = correctionRate * boundedElapsed + state.fractionalCorrection;
+        long magnitude = Math.min(absoluteDelta, (long) Math.floor(available));
+        state.fractionalCorrection = available - magnitude;
+        if (magnitude <= 0L) {
+            return currentAbsolute;
+        }
+        return delta > 0L ? safeAdd(currentAbsolute, magnitude) : safeAdd(currentAbsolute, -magnitude);
     }
 
-    private static double wrapTicks(double ticks) {
-        double wrapped = ticks % TICKS_PER_DAY;
-        return wrapped < 0.0D ? wrapped + TICKS_PER_DAY : wrapped;
+    public double elapsedSeconds(long previousNanos, long currentNanos, int maximumCatchUpSeconds) {
+        if (previousNanos == Long.MIN_VALUE) {
+            return 0.0D;
+        }
+        double elapsed = nonNegativeElapsed(previousNanos, currentNanos) / NANOS_PER_SECOND;
+        return Math.min(elapsed, Math.max(0, maximumCatchUpSeconds));
     }
 
-    public void resetCustomTicks() {
+    public boolean isPausedLargeJump(long currentAbsolute, long targetAbsolute, RealtimeConfig config) {
+        return RealtimeConfig.LARGE_JUMP_PAUSE_AND_WARN.equals(config.smoothLargeJumpPolicy)
+                && safeAbs(safeSubtract(targetAbsolute, currentAbsolute)) > TICKS_PER_DAY;
+    }
+
+    public void initializeCustomClock(double absoluteTicks, long nowNanos) {
+        customAbsoluteTicks = absoluteTicks;
+        lastCustomUpdateNanos = nowNanos;
+    }
+
+    public double customClockValue() {
+        return customAbsoluteTicks;
+    }
+
+    public void resetCustomClock() {
         lastCustomUpdateNanos = Long.MIN_VALUE;
+        customAbsoluteTicks = 0.0D;
+    }
+
+    public void resetRealtimeAnchor() {
+        // Kept as a compatibility hook for controller reloads. Current policies are stateless.
+    }
+
+    private static long nonNegativeElapsed(long previous, long current) {
+        if (current < previous) {
+            return 0L;
+        }
+        return current - previous;
+    }
+
+    private static long safeSubtract(long left, long right) {
+        try {
+            return Math.subtractExact(left, right);
+        } catch (ArithmeticException exception) {
+            return left >= right ? Long.MAX_VALUE : Long.MIN_VALUE + 1L;
+        }
+    }
+
+    private static long safeAdd(long left, long right) {
+        try {
+            return Math.addExact(left, right);
+        } catch (ArithmeticException exception) {
+            return right >= 0L ? Long.MAX_VALUE : Long.MIN_VALUE;
+        }
+    }
+
+    private static long safeAbs(long value) {
+        return value == Long.MIN_VALUE ? Long.MAX_VALUE : Math.abs(value);
+    }
+
+    public static final class SmoothState {
+        private double fractionalCorrection;
+        private int direction;
+
+        public void reset() {
+            fractionalCorrection = 0.0D;
+            direction = 0;
+        }
     }
 }

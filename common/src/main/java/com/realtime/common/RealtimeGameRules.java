@@ -3,257 +3,205 @@ package com.realtime.common;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.IdentityHashMap;
+import java.util.Map;
 
+/** Owns daylight gamerule changes and restores only values still owned by this mod. */
 public final class RealtimeGameRules {
-    private static final List<String> DAYLIGHT_RULE_FIELD_NAMES = List.of(
-            "DO_DAYLIGHT_CYCLE",
-            "ADVANCE_TIME",
-            "RULE_DAYLIGHT",
-            "RULE_ADVANCE_TIME",
-            "field_19396"
-    );
+    private static final boolean MANAGED_VALUE = false;
+    private static final boolean SLEEP_VALUE = true;
 
     private final RealtimeLog logger;
-    private final ConcurrentMap<Class<?>, Resolution> resolvedByGameRulesClass = new ConcurrentHashMap<>();
-    private final Set<Class<?>> unresolvedGameRulesClasses = ConcurrentHashMap.newKeySet();
-    private volatile boolean missingRuleWarningShown = false;
+    private final DaylightRuleAccess access = new ProfileDaylightRuleAccess();
+    private final Map<Object, ManagedState> managedStates = new IdentityHashMap<>();
+    private boolean unavailableWarningShown;
+    private boolean requireOffWarningShown;
 
     public RealtimeGameRules(RealtimeLog logger) {
         this.logger = logger;
     }
 
-    public void resetWarningState() {
-        missingRuleWarningShown = false;
+    public String adapterName() {
+        return access.adapterName();
     }
 
-    public boolean disableDaylightCycle(ServerLevel level, MinecraftServer server) {
-        return setDaylightCycle(level, server, false);
-    }
-
-    public boolean disableDaylightCycle(MinecraftServer server) {
-        boolean appliedToAnyLevel = false;
-        for (ServerLevel level : server.getAllLevels()) {
-            appliedToAnyLevel |= setDaylightCycle(level, server, false);
+    public String describeState(ServerLevel level) {
+        try {
+            Object identity = RealtimeWorldAccess.gameRulesIdentity(level);
+            ManagedState state = managedStates.get(identity);
+            boolean advancing = access.isTimeAdvancing(level);
+            boolean owned = state != null
+                    && !state.ownershipLost
+                    && (state.changedByMod || state.sleepWindowActive);
+            return "advancing=" + advancing
+                    + ", ownedByRealtimeSync=" + owned
+                    + ", sleepOverride=" + (state != null && state.sleepWindowActive);
+        } catch (RuntimeException exception) {
+            return "unavailable(" + exception.getClass().getSimpleName() + ")";
         }
-        return appliedToAnyLevel;
     }
 
-    private boolean setDaylightCycle(ServerLevel level, MinecraftServer server, boolean value) {
-        Object gameRules = RealtimeWorldAccess.gameRules(level);
-        if (gameRules == null) {
+    public boolean applyPolicy(ServerLevel level, MinecraftServer server, String policy) {
+        if (RealtimeConfig.DAYLIGHT_POLICY_IGNORE.equals(policy)) {
+            return true;
+        }
+
+        try {
+            boolean current = access.isTimeAdvancing(level);
+            if (RealtimeConfig.DAYLIGHT_POLICY_REQUIRE_OFF.equals(policy)) {
+                if (current && !requireOffWarningShown) {
+                    requireOffWarningShown = true;
+                    logger.warn("RealtimeSync requires the daylight gamerule to be off, but it is currently enabled. Time writes may compete with vanilla progression.");
+                }
+                return !current;
+            }
+
+            return manage(level, server, current);
+        } catch (RuntimeException exception) {
+            warnUnavailableOnce(exception);
             return false;
         }
-
-        Class<?> gameRulesClass = gameRules.getClass();
-        Resolution cached = resolvedByGameRulesClass.get(gameRulesClass);
-        if (cached != null) {
-            return cached.trySet(gameRules, server, value);
-        }
-        if (unresolvedGameRulesClasses.contains(gameRulesClass)) {
-            warnMissingRuleOnce(gameRulesClass, true);
-            return false;
-        }
-
-        Resolution resolved = resolve(gameRules, server, value);
-        if (resolved == null) {
-            unresolvedGameRulesClasses.add(gameRulesClass);
-            warnMissingRuleOnce(gameRulesClass, false);
-            return false;
-        }
-
-        resolvedByGameRulesClass.put(gameRulesClass, resolved);
-        return true;
     }
 
-    private Resolution resolve(Object gameRules, MinecraftServer server, boolean value) {
-        Class<?> gameRulesClass = gameRules.getClass();
-
-        for (String fieldName : DAYLIGHT_RULE_FIELD_NAMES) {
+    /**
+     * Temporarily enables vanilla time progression while players are sleeping.
+     * This is needed even when the administrator's original gamerule value was false;
+     * otherwise respectSleep=true can deadlock the night forever.
+     */
+    public void beginSleepWindow(MinecraftServer server) {
+        for (ManagedState state : managedStates.values()) {
+            if (state.ownershipLost || state.level == null || state.sleepWindowActive) {
+                continue;
+            }
             try {
-                Field keyField = findField(gameRulesClass, fieldName);
-                if (keyField == null) {
-                    continue;
-                }
-
-                keyField.setAccessible(true);
-                Object key = keyField.get(null);
-                if (key == null) {
-                    continue;
-                }
-
-                Method directSetter = findDirectGameRuleSetter(gameRulesClass, key, server);
-                if (directSetter != null) {
-                    Resolution resolution = Resolution.direct(keyField, directSetter);
-                    if (resolution.trySet(gameRules, server, value)) {
-                        return resolution;
+                boolean current = access.isTimeAdvancing(state.level);
+                state.sleepWindowActive = true;
+                state.expectedSleepValue = SLEEP_VALUE;
+                if (current != SLEEP_VALUE) {
+                    access.setTimeAdvancing(state.level, server, SLEEP_VALUE);
+                    if (access.isTimeAdvancing(state.level) != SLEEP_VALUE) {
+                        state.sleepWindowActive = false;
+                        continue;
                     }
                 }
-
-                Method getRuleMethod = findGetRuleMethod(gameRulesClass, key);
-                if (getRuleMethod == null) {
-                    continue;
-                }
-
-                Object rule = getRuleMethod.invoke(gameRules, key);
-                if (rule == null) {
-                    continue;
-                }
-
-                Method ruleSetter = findBooleanRuleSetter(rule.getClass(), server);
-                if (ruleSetter != null) {
-                    Resolution resolution = Resolution.rule(keyField, getRuleMethod, ruleSetter);
-                    if (resolution.trySet(gameRules, server, value)) {
-                        return resolution;
-                    }
-                }
-            } catch (ReflectiveOperationException | RuntimeException ignored) {
-                // Try the next Minecraft 1.21.x gamerule key name or setter shape.
+                // The normal managed write is suspended while vanilla handles sleeping.
+                state.changedByMod = false;
+            } catch (RuntimeException exception) {
+                warnUnavailableOnce(exception);
             }
         }
-
-        return null;
     }
 
-    private void warnMissingRuleOnce(Class<?> gameRulesClass, boolean cachedFailure) {
-        if (missingRuleWarningShown) {
+    /** Ends the temporary sleep override without overwriting an administrator change made during sleep. */
+    public void endSleepWindow(MinecraftServer server) {
+        for (ManagedState state : managedStates.values()) {
+            if (!state.sleepWindowActive || state.level == null) {
+                continue;
+            }
+            try {
+                boolean current = access.isTimeAdvancing(state.level);
+                state.sleepWindowActive = false;
+                if (current != state.expectedSleepValue) {
+                    state.changedByMod = false;
+                    state.ownershipLost = true;
+                    logger.warn("Daylight gamerule changed externally during the RealtimeSync sleep window. Ownership was released and the administrator value will be respected until restart or config reload.");
+                    continue;
+                }
+
+                access.setTimeAdvancing(state.level, server, MANAGED_VALUE);
+                boolean applied = access.isTimeAdvancing(state.level) == MANAGED_VALUE;
+                state.changedByMod = applied && state.initialValue != MANAGED_VALUE;
+            } catch (RuntimeException exception) {
+                state.sleepWindowActive = false;
+                warnUnavailableOnce(exception);
+            }
+        }
+    }
+
+    public void restoreAll(MinecraftServer server) {
+        restoreOwnedValues(server, true);
+    }
+
+    public void clearRuntimeState() {
+        managedStates.clear();
+        unavailableWarningShown = false;
+        requireOffWarningShown = false;
+    }
+
+    private boolean manage(ServerLevel level, MinecraftServer server, boolean current) {
+        Object identity = RealtimeWorldAccess.gameRulesIdentity(level);
+        ManagedState state = managedStates.computeIfAbsent(identity, ignored -> new ManagedState(level, current));
+        state.level = level;
+
+        if (state.ownershipLost || state.sleepWindowActive) {
+            return false;
+        }
+
+        if (state.changedByMod && current != MANAGED_VALUE) {
+            state.changedByMod = false;
+            state.ownershipLost = true;
+            logger.warn("Daylight gamerule was changed externally while RealtimeSync managed it. Ownership was released and the administrator value will be respected until restart or config reload.");
+            return false;
+        }
+
+        if (current == MANAGED_VALUE) {
+            return true;
+        }
+
+        access.setTimeAdvancing(level, server, MANAGED_VALUE);
+        boolean applied = access.isTimeAdvancing(level) == MANAGED_VALUE;
+        state.changedByMod = applied && state.initialValue != MANAGED_VALUE;
+        return applied;
+    }
+
+    private void restoreOwnedValues(MinecraftServer server, boolean clear) {
+        for (ManagedState state : managedStates.values()) {
+            if (state.ownershipLost || state.level == null) {
+                continue;
+            }
+            try {
+                boolean current = access.isTimeAdvancing(state.level);
+                if (state.sleepWindowActive) {
+                    // Only revert a sleep value that is still exactly the value written by us.
+                    if (current == state.expectedSleepValue) {
+                        access.setTimeAdvancing(state.level, server, state.initialValue);
+                    }
+                    state.sleepWindowActive = false;
+                    state.changedByMod = false;
+                    continue;
+                }
+                if (state.changedByMod && current == MANAGED_VALUE) {
+                    access.setTimeAdvancing(state.level, server, state.initialValue);
+                }
+                state.changedByMod = false;
+            } catch (RuntimeException exception) {
+                warnUnavailableOnce(exception);
+            }
+        }
+        if (clear) {
+            managedStates.clear();
+        }
+    }
+
+    private void warnUnavailableOnce(RuntimeException exception) {
+        if (unavailableWarningShown) {
             return;
         }
-
-        missingRuleWarningShown = true;
-        String cacheNote = cachedFailure ? " The unavailable lookup is cached for this runtime." : "";
-        logger.warn("Could not disable vanilla daylight cycle: no compatible daylight gamerule key was found on {}.{}",
-                gameRulesClass.getName(), cacheNote);
+        unavailableWarningShown = true;
+        logger.warn("Could not access the daylight gamerule using adapter {}: {}", access.adapterName(), exception.toString());
     }
 
-    private static Field findField(Class<?> type, String fieldName) {
-        Class<?> current = type;
-        while (current != null) {
-            try {
-                return current.getDeclaredField(fieldName);
-            } catch (NoSuchFieldException ignored) {
-                current = current.getSuperclass();
-            }
-        }
+    private static final class ManagedState {
+        private ServerLevel level;
+        private final boolean initialValue;
+        private boolean changedByMod;
+        private boolean ownershipLost;
+        private boolean sleepWindowActive;
+        private boolean expectedSleepValue;
 
-        return null;
-    }
-
-    private static Method findDirectGameRuleSetter(Class<?> gameRulesClass, Object key, MinecraftServer server) {
-        for (Method method : gameRulesClass.getMethods()) {
-            if (!method.getName().equals("setValue") || method.getParameterCount() != 3) {
-                continue;
-            }
-
-            Class<?>[] parameterTypes = method.getParameterTypes();
-            if (!parameterTypes[0].isAssignableFrom(key.getClass())) {
-                continue;
-            }
-            if (!RealtimeReflection.acceptsBooleanValue(parameterTypes[1])) {
-                continue;
-            }
-            if (!parameterTypes[2].isAssignableFrom(server.getClass())) {
-                continue;
-            }
-
-            method.setAccessible(true);
-            return method;
-        }
-
-        return null;
-    }
-
-    private static Method findGetRuleMethod(Class<?> gameRulesClass, Object key) {
-        for (Method method : gameRulesClass.getMethods()) {
-            if ((!method.getName().equals("get") && !method.getName().equals("getRule")) || method.getParameterCount() != 1) {
-                continue;
-            }
-
-            Class<?> parameterType = method.getParameterTypes()[0];
-            if (!parameterType.isAssignableFrom(key.getClass())) {
-                continue;
-            }
-
-            method.setAccessible(true);
-            return method;
-        }
-
-        return null;
-    }
-
-    private static Method findBooleanRuleSetter(Class<?> ruleClass, MinecraftServer server) {
-        for (Method method : ruleClass.getMethods()) {
-            if (!method.getName().equals("set") || method.getParameterCount() != 2) {
-                continue;
-            }
-
-            Class<?>[] parameterTypes = method.getParameterTypes();
-            if (!RealtimeReflection.acceptsBooleanValue(parameterTypes[0])) {
-                continue;
-            }
-            if (!parameterTypes[1].isAssignableFrom(server.getClass())) {
-                continue;
-            }
-
-            method.setAccessible(true);
-            return method;
-        }
-
-        return null;
-    }
-
-    private static final class Resolution {
-        private final Field keyField;
-        private final Method directSetter;
-        private final Method getRuleMethod;
-        private final Method ruleSetter;
-
-        private Resolution(Field keyField, Method directSetter, Method getRuleMethod, Method ruleSetter) {
-            this.keyField = keyField;
-            this.directSetter = directSetter;
-            this.getRuleMethod = getRuleMethod;
-            this.ruleSetter = ruleSetter;
-        }
-
-        static Resolution direct(Field keyField, Method directSetter) {
-            return new Resolution(keyField, directSetter, null, null);
-        }
-
-        static Resolution rule(Field keyField, Method getRuleMethod, Method ruleSetter) {
-            return new Resolution(keyField, null, getRuleMethod, ruleSetter);
-        }
-
-        boolean trySet(Object gameRules, MinecraftServer server, boolean value) {
-            try {
-                Object key = keyField.get(null);
-                if (key == null) {
-                    return false;
-                }
-
-                if (directSetter != null) {
-                    directSetter.invoke(gameRules, key, value, server);
-                    return true;
-                }
-
-                if (getRuleMethod == null || ruleSetter == null) {
-                    return false;
-                }
-
-                Object rule = getRuleMethod.invoke(gameRules, key);
-                if (rule == null) {
-                    return false;
-                }
-
-                ruleSetter.invoke(rule, value, server);
-                return true;
-            } catch (ReflectiveOperationException | RuntimeException ignored) {
-                return false;
-            }
+        private ManagedState(ServerLevel level, boolean initialValue) {
+            this.level = level;
+            this.initialValue = initialValue;
         }
     }
 }
