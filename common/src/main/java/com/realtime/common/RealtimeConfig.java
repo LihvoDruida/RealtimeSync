@@ -68,7 +68,9 @@ public final class RealtimeConfig {
             "smoothMaxCorrectionTicksPerSecond", "maxSmoothStepTicks", "smoothSnapThresholdTicks",
             "smoothCatchupDivisor", "smoothLargeJumpPolicy", "maximumOfflineCatchUpSeconds",
             "respectSleep", "overrideSleepTime", "sleepPolicy", "sleepRealignMinutes",
-            "updateInterval", "customDayLengthMinutes",
+            "updateInterval", "idleUpdateInterval", "maxTicksPerUpdate",
+            "seasonalDaylight", "latitude", "seasonalDaylightMinPercent", "seasonalDaylightMaxPercent",
+            "customDayLengthMinutes",
             "minutesPerMinecraftDay", "customClockRestartPolicy", "debugLogging",
             "debugPerformanceLogging"
     );
@@ -90,10 +92,16 @@ public final class RealtimeConfig {
     public int maximumOfflineCatchUpSeconds = 300;
     public boolean respectSleep = true;
     public boolean overrideSleepTime = false;
-    public String sleepPolicy = SLEEP_POLICY_REALIGN;
+    public String sleepPolicy = SLEEP_POLICY_REALTIME_ONLY;
     public int sleepRealignMinutes = 360;
     public int updateInterval = 20;
-    public int customDayLengthMinutes = 0;
+    public int idleUpdateInterval = 100;
+    public int maxTicksPerUpdate = 40;
+    public boolean seasonalDaylight = true;
+    public double latitude = 50.0D;
+    public int seasonalDaylightMinPercent = 25;
+    public int seasonalDaylightMaxPercent = 75;
+    public int customDayLengthMinutes = 60;
     public String customClockRestartPolicy = CUSTOM_RESTART_CONTINUE_FROM_WORLD;
     public boolean debugLogging = false;
     public boolean debugPerformanceLogging = false;
@@ -211,6 +219,12 @@ public final class RealtimeConfig {
         config.smoothCatchupDivisor = readInt(properties, "smoothCatchupDivisor", config.smoothCatchupDivisor, logger);
         config.smoothLargeJumpPolicy = readString(properties, "smoothLargeJumpPolicy", config.smoothLargeJumpPolicy);
         config.maximumOfflineCatchUpSeconds = readInt(properties, "maximumOfflineCatchUpSeconds", config.maximumOfflineCatchUpSeconds, logger);
+        config.idleUpdateInterval = readInt(properties, "idleUpdateInterval", config.idleUpdateInterval, logger);
+        config.maxTicksPerUpdate = readInt(properties, "maxTicksPerUpdate", config.maxTicksPerUpdate, logger);
+        config.seasonalDaylight = readBoolean(properties, "seasonalDaylight", config.seasonalDaylight, logger);
+        config.latitude = readDouble(properties, "latitude", config.latitude, logger);
+        config.seasonalDaylightMinPercent = readInt(properties, "seasonalDaylightMinPercent", config.seasonalDaylightMinPercent, logger);
+        config.seasonalDaylightMaxPercent = readInt(properties, "seasonalDaylightMaxPercent", config.seasonalDaylightMaxPercent, logger);
         config.sleepPolicy = readString(properties, "sleepPolicy", config.sleepPolicy);
         config.sleepRealignMinutes = readInt(properties, "sleepRealignMinutes", config.sleepRealignMinutes, logger);
         config.respectSleep = readBoolean(properties, "respectSleep", config.respectSleep, logger);
@@ -274,6 +288,18 @@ public final class RealtimeConfig {
         return sleepPolicy;
     }
 
+    /** Share of the compressed Minecraft day that should be daylight right now. */
+    public double daylightFraction(int dayOfYear) {
+        if (!seasonalDaylight) {
+            return RealtimeSolar.UNIFORM_DAYLIGHT_FRACTION;
+        }
+        return RealtimeSolar.clampedDaylightFraction(
+                dayOfYear,
+                latitude,
+                seasonalDaylightMinPercent / 100.0D,
+                seasonalDaylightMaxPercent / 100.0D);
+    }
+
     public boolean isSmoothSyncMode() {
         return SYNC_MODE_SMOOTH.equals(syncMode);
     }
@@ -303,6 +329,24 @@ public final class RealtimeConfig {
         smoothCatchupDivisor = clampWithWarning("smoothCatchupDivisor", smoothCatchupDivisor, 1, MAX_CATCHUP_DIVISOR, logger);
         maximumOfflineCatchUpSeconds = clampWithWarning("maximumOfflineCatchUpSeconds", maximumOfflineCatchUpSeconds, 1, MAX_OFFLINE_CATCHUP_SECONDS, logger);
         sleepRealignMinutes = clampWithWarning("sleepRealignMinutes", sleepRealignMinutes, MIN_SLEEP_REALIGN_MINUTES, MAX_SLEEP_REALIGN_MINUTES, logger);
+        idleUpdateInterval = clampWithWarning("idleUpdateInterval", idleUpdateInterval, MIN_UPDATE_INTERVAL_TICKS, MAX_UPDATE_INTERVAL_TICKS, logger);
+        maxTicksPerUpdate = clampWithWarning("maxTicksPerUpdate", maxTicksPerUpdate, 1, (int) AbsoluteDayTime.TICKS_PER_DAY, logger);
+        seasonalDaylightMinPercent = clampWithWarning("seasonalDaylightMinPercent", seasonalDaylightMinPercent, 1, 99, logger);
+        seasonalDaylightMaxPercent = clampWithWarning("seasonalDaylightMaxPercent", seasonalDaylightMaxPercent, 1, 99, logger);
+        if (seasonalDaylightMinPercent > seasonalDaylightMaxPercent) {
+            logger.warn("seasonalDaylightMinPercent={} is above seasonalDaylightMaxPercent={}; the values were swapped.",
+                    seasonalDaylightMinPercent, seasonalDaylightMaxPercent);
+            int swap = seasonalDaylightMinPercent;
+            seasonalDaylightMinPercent = seasonalDaylightMaxPercent;
+            seasonalDaylightMaxPercent = swap;
+        }
+        if (!Double.isFinite(latitude) || latitude < -90.0D || latitude > 90.0D) {
+            logger.warn("Config value latitude={} is outside -90..90. Using 0.0 (equator).", latitude);
+            latitude = 0.0D;
+        }
+        if (idleUpdateInterval < updateInterval) {
+            idleUpdateInterval = updateInterval;
+        }
 
         syncMode = normalizeEnum("syncMode", syncMode, Set.of(SYNC_MODE_INSTANT, SYNC_MODE_SMOOTH), SYNC_MODE_SMOOTH, false, logger);
         daylightRulePolicy = normalizeEnum("daylightRulePolicy", daylightRulePolicy, Set.of(DAYLIGHT_POLICY_MANAGED, DAYLIGHT_POLICY_REQUIRE_OFF, DAYLIGHT_POLICY_IGNORE), DAYLIGHT_POLICY_MANAGED, true, logger);
@@ -336,6 +380,10 @@ public final class RealtimeConfig {
 
         if (overrideSleepTime && respectSleep) {
             logger.warn("Both respectSleep=true and overrideSleepTime=true are set; overrideSleepTime takes precedence and sleepPolicy is treated as {}.", SLEEP_POLICY_REALTIME_ONLY);
+        }
+
+        if (seasonalDaylight && customDayLengthMinutes <= 0) {
+            logger.warn("seasonalDaylight=true has no effect while customDayLengthMinutes=0. Minecraft fixes sunrise and sunset to tick values, so day and night proportions can only be changed by a compressed day cycle.");
         }
 
         if (SLEEP_POLICY_REALIGN.equals(effectiveSleepPolicy()) && customDayLengthMinutes > 0) {
@@ -379,7 +427,13 @@ public final class RealtimeConfig {
                 + "respectSleep=" + respectSleep + "\n"
                 + "overrideSleepTime=" + overrideSleepTime + "\n"
                 + "sleepPolicy=" + sleepPolicy + "\n"
-                + "sleepRealignMinutes=" + sleepRealignMinutes + "\n"
+                + "sleepRealignMinutes=" + sleepRealignMinutes + "\n\n"
+                + "seasonalDaylight=" + seasonalDaylight + "\n"
+                + "latitude=" + latitude + "\n"
+                + "seasonalDaylightMinPercent=" + seasonalDaylightMinPercent + "\n"
+                + "seasonalDaylightMaxPercent=" + seasonalDaylightMaxPercent + "\n"
+                + "idleUpdateInterval=" + idleUpdateInterval + "\n"
+                + "maxTicksPerUpdate=" + maxTicksPerUpdate + "\n"
                 + "debugLogging=" + debugLogging + "\n"
                 + "debugPerformanceLogging=" + debugPerformanceLogging + "\n";
     }
@@ -468,6 +522,19 @@ public final class RealtimeConfig {
         }
         logger.warn("Config value {}={} is not a boolean. Using {}.", key, value, fallback);
         return fallback;
+    }
+
+    private static double readDouble(Properties properties, String key, double fallback, RealtimeLog logger) {
+        String value = properties.getProperty(key);
+        if (value == null) {
+            return fallback;
+        }
+        try {
+            return Double.parseDouble(value.trim());
+        } catch (NumberFormatException exception) {
+            logger.warn("Config value {}={} is not a number. Using {}.", key, value, fallback);
+            return fallback;
+        }
     }
 
     private static int readInt(Properties properties, String key, int fallback, RealtimeLog logger) {

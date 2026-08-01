@@ -26,6 +26,8 @@ public final class CoreLogicTest {
         testLargeJumpPauseDetection();
         testSleepRealign();
         testSleepPolicyResolution();
+        testSolarSeasons();
+        testSeasonalCustomClock();
         System.out.println("Core logic tests passed.");
     }
 
@@ -100,9 +102,9 @@ public final class CoreLogicTest {
     private static void testCustomClock() {
         AtomicLong nanos = new AtomicLong(1_000_000_000L);
         RealtimeMath math = new RealtimeMath(Clock.fixed(Instant.EPOCH, ZoneOffset.UTC), nanos::get);
-        assertEquals(48_000L, math.calculateCustomAbsoluteTicks(48_000L, 20, 300), "custom initializes from absolute world time");
+        assertEquals(48_000L, math.calculateCustomAbsoluteTicks(48_000L, 20, 300, RealtimeSolar.UNIFORM_DAYLIGHT_FRACTION), "custom initializes from absolute world time");
         nanos.addAndGet(60_000_000_000L);
-        assertEquals(49_200L, math.calculateCustomAbsoluteTicks(48_000L, 20, 300), "one real minute in 20-minute day");
+        assertEquals(49_200L, math.calculateCustomAbsoluteTicks(48_000L, 20, 300, RealtimeSolar.UNIFORM_DAYLIGHT_FRACTION), "one real minute in 20-minute day");
         assertEquals(2L, AbsoluteDayTime.dayIndex(49_200L), "custom clock preserves day count");
     }
 
@@ -150,6 +152,69 @@ public final class CoreLogicTest {
         assertTrue(!math.isPausedLargeJump(0L, 30_000L, gradual), "GRADUAL never reports a pause");
     }
 
+    private static void testSolarSeasons() {
+        // At the equator the sun is up for half the day all year round.
+        assertNear(0.5D, RealtimeSolar.daylightFraction(172, 0.0D), 0.01D, "equator midsummer");
+        assertNear(0.5D, RealtimeSolar.daylightFraction(355, 0.0D), 0.01D, "equator midwinter");
+
+        // Mid-northern latitude: long summer days, long winter nights.
+        double summer = RealtimeSolar.daylightFraction(172, 50.0D);
+        double winter = RealtimeSolar.daylightFraction(355, 50.0D);
+        double equinox = RealtimeSolar.daylightFraction(80, 50.0D);
+        assertNear(0.673D, summer, 0.02D, "50N around the June solstice is about 16 hours of daylight");
+        assertNear(0.327D, winter, 0.02D, "50N around the December solstice is about 8 hours of daylight");
+        assertNear(0.5D, equinox, 0.02D, "50N at the equinox is an even split");
+        assertTrue(summer > equinox && equinox > winter, "daylight shrinks from summer to winter");
+
+        // The southern hemisphere is mirrored.
+        assertNear(winter, RealtimeSolar.daylightFraction(172, -50.0D), 0.01D, "June is winter south of the equator");
+        assertEquals("WINTER", RealtimeSolar.seasonName(6, -50.0D), "June is winter in the south");
+        assertEquals("SUMMER", RealtimeSolar.seasonName(6, 50.0D), "June is summer in the north");
+
+        // Polar extremes are clamped so neither half of the cycle can stall.
+        assertNear(1.0D, RealtimeSolar.daylightFraction(172, 80.0D), 0.0D, "midnight sun");
+        assertNear(0.0D, RealtimeSolar.daylightFraction(355, 80.0D), 0.0D, "polar night");
+        assertNear(0.75D, RealtimeSolar.clampedDaylightFraction(172, 80.0D, 0.25D, 0.75D), 0.001D, "midnight sun is clamped");
+        assertNear(0.25D, RealtimeSolar.clampedDaylightFraction(355, 80.0D, 0.25D, 0.75D), 0.001D, "polar night is clamped");
+    }
+
+    private static void testSeasonalCustomClock() {
+        AtomicLong nanos = new AtomicLong(0L);
+        RealtimeMath math = new RealtimeMath(Clock.fixed(Instant.EPOCH, ZoneOffset.UTC), nanos::get);
+
+        // A 60-minute day where three quarters of the cycle is daylight: 45 real minutes
+        // must carry the clock exactly from sunrise to sunset, and 15 more to sunrise again.
+        int dayLengthMinutes = 60;
+        double fraction = 0.75D;
+        assertEquals(0L, math.calculateCustomAbsoluteTicks(0L, dayLengthMinutes, 7_200, fraction), "clock starts at sunrise");
+
+        nanos.addAndGet(45L * 60L * 1_000_000_000L);
+        assertEquals(RealtimeSolar.DAYLIGHT_END_TICK,
+                math.calculateCustomAbsoluteTicks(0L, dayLengthMinutes, 7_200, fraction),
+                "45 real minutes of a 75% daylight day reach sunset");
+
+        nanos.addAndGet(15L * 60L * 1_000_000_000L);
+        assertEquals(AbsoluteDayTime.TICKS_PER_DAY,
+                math.calculateCustomAbsoluteTicks(0L, dayLengthMinutes, 7_200, fraction),
+                "the remaining 15 real minutes cover the whole night");
+
+        // An update that spans sunset uses both rates, so a full cycle still takes exactly
+        // one configured day even when it is consumed in a single step.
+        AtomicLong single = new AtomicLong(0L);
+        RealtimeMath spanning = new RealtimeMath(Clock.fixed(Instant.EPOCH, ZoneOffset.UTC), single::get);
+        spanning.calculateCustomAbsoluteTicks(0L, dayLengthMinutes, 7_200, fraction);
+        single.addAndGet(60L * 60L * 1_000_000_000L);
+        assertEquals(AbsoluteDayTime.TICKS_PER_DAY,
+                spanning.calculateCustomAbsoluteTicks(0L, dayLengthMinutes, 7_200, fraction),
+                "one real hour is exactly one Minecraft day regardless of update size");
+    }
+
+    private static void assertNear(double expected, double actual, double tolerance, String message) {
+        if (Math.abs(expected - actual) > tolerance) {
+            throw new AssertionError(message + ": expected " + expected + " +/- " + tolerance + " but was " + actual);
+        }
+    }
+
     private static void testSleepRealign() {
         AtomicLong nanos = new AtomicLong(1_000_000_000L);
         RealtimeMath math = new RealtimeMath(Clock.fixed(Instant.EPOCH, ZoneOffset.UTC), nanos::get);
@@ -181,7 +246,7 @@ public final class CoreLogicTest {
     }
 
     private static void testSleepPolicyResolution() throws Exception {
-        assertEquals(RealtimeConfig.SLEEP_POLICY_REALIGN, new RealtimeConfig().sleepPolicy, "REALIGN is the default policy");
+        assertEquals(RealtimeConfig.SLEEP_POLICY_REALTIME_ONLY, new RealtimeConfig().sleepPolicy, "REALTIME_ONLY is the default policy");
         assertEquals(RealtimeConfig.SLEEP_POLICY_REALIGN, sleepPolicyFor("sleepPolicy=realign\n"), "lower-case policy is normalized");
         assertEquals(RealtimeConfig.SLEEP_POLICY_VANILLA, sleepPolicyFor("sleepPolicy=VANILLA\n"), "VANILLA policy is accepted");
         assertEquals(RealtimeConfig.SLEEP_POLICY_REALIGN, sleepPolicyFor("sleepPolicy=nonsense\n"), "invalid policy falls back to REALIGN");

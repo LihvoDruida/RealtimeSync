@@ -85,8 +85,15 @@ customDayLengthMinutes=0
 customClockRestartPolicy=CONTINUE_FROM_WORLD
 respectSleep=true
 overrideSleepTime=false
-sleepPolicy=REALIGN
+sleepPolicy=REALTIME_ONLY
 sleepRealignMinutes=360
+
+seasonalDaylight=true
+latitude=50.0
+seasonalDaylightMinPercent=25
+seasonalDaylightMaxPercent=75
+idleUpdateInterval=100
+maxTicksPerUpdate=40
 debugLogging=false
 debugPerformanceLogging=false
 ```
@@ -115,7 +122,7 @@ debugPerformanceLogging=false
 | `customClockRestartPolicy` | `CONTINUE_FROM_WORLD` | `CONTINUE_FROM_WORLD`, `RESET_TO_CONFIGURED_TIME`, or `PERSIST_REAL_ELAPSED`. |
 | `respectSleep` | `true` | Temporarily releases the managed daylight rule and pauses mod writes **in the dimension where a player is sleeping**, allowing vanilla sleep progression. Other managed dimensions keep synchronizing. |
 | `overrideSleepTime` | `false` | Keeps synchronization active during sleep. Equivalent to `sleepPolicy=REALTIME_ONLY`. |
-| `sleepPolicy` | `REALIGN` | `REALIGN` accepts the vanilla sleep skip and then runs the world clock fast until it meets real time again. `VANILLA` lets the next update pull the clock straight back to real time. `REALTIME_ONLY` never lets sleeping change the clock. |
+| `sleepPolicy` | `REALTIME_ONLY` | `REALTIME_ONLY` never lets sleeping change the clock. `REALIGN` accepts the vanilla sleep skip and then runs the world clock fast until it meets real time again. `VANILLA` lets the next update pull the clock straight back to real time. |
 | `sleepRealignMinutes` | `360` | Real minutes a `REALIGN` window takes to return the world to real time. Lower values mean a faster, more noticeable world clock. |
 | `debugLogging` | `false` | Enables detailed functional logs. |
 | `debugPerformanceLogging` | `false` | Emits aggregated 60-second performance summaries rather than per-tick spam. |
@@ -130,9 +137,9 @@ Real-time synchronization and vanilla sleep want opposite things. Vanilla sleep 
 
 | Value | Behavior | Use when |
 | --- | --- | --- |
-| `REALIGN` (default) | Vanilla performs the skip. The mod adopts the resulting morning as a temporary offset from real time, then closes the gap by running the world clock **faster** than real time for `sleepRealignMinutes`. | Sleeping should feel normal and the world should still end up on real time. |
+| `REALIGN` | Vanilla performs the skip. The mod adopts the resulting morning as a temporary offset from real time, then closes the gap by running the world clock **faster** than real time for `sleepRealignMinutes`. | Sleeping should feel normal and the world should still end up on real time. |
 | `VANILLA` | Vanilla performs the skip and the next synchronization pass pulls the clock back to real time. | The pre-existing behavior is wanted. |
-| `REALTIME_ONLY` | Sleeping never changes the clock. Players still wake up, reset their spawn point and clear phantom timers. | The world must never leave real time. |
+| `REALTIME_ONLY` (default) | Sleeping never changes the clock. Players still wake up, reset their spawn point and clear phantom timers. | The world must never leave real time. |
 
 Realignment only ever moves the clock **forward**. Closing the gap by rewinding would run the sun backwards, so the offset is instead grown until it laps a full Minecraft day and reaches zero again. In practice: sleep at 01:00 real time skips to 06:00 in game, the world is then about five real hours ahead, the following in-game day runs at roughly 4x speed for six real hours, and the clock is back on real time afterwards.
 
@@ -143,6 +150,43 @@ Consequences worth knowing:
 - An active realignment window survives a restart. It is stored in `config/realtime-state.properties` and resumed with the elapsed downtime applied, capped by `maximumOfflineCatchUpSeconds`.
 - `REALIGN` is ignored while `customDayLengthMinutes` drives the clock, and it shifts only the time of day, so `dayProgressionPolicy=REAL_DATE_ANCHOR` may roll the Minecraft day over while an offset is active. Both cases are reported as configuration warnings.
 - The legacy `respectSleep=false` and `overrideSleepTime=true` switches still work and both resolve to `REALTIME_ONLY`.
+
+### Compressed day cycle and seasons
+
+The shipped default is a **one hour Minecraft day** (`customDayLengthMinutes=60`) with real-world seasonal proportions rather than a mirror of the wall clock. A fresh install therefore behaves like a well-paced survival world, not like a window onto the host's clock. Setting `customDayLengthMinutes=0` restores pure real-time synchronization; every existing config file keeps whatever value it already contains.
+
+#### Why seasons need a compressed cycle
+
+Minecraft cannot move sunrise and sunset. The tick value *is* the sun angle: daylight is always ticks 0 to 12000 and night is always 12000 to 24000. The only way to make a summer day feel long and a winter night feel long is to spend a different amount of **real** time on each half of the cycle. `seasonalDaylight` does exactly that, so it requires `customDayLengthMinutes > 0` and is reported as a configuration warning otherwise.
+
+#### The model
+
+`latitude` and the current real calendar day feed the standard sunrise equation (solar declination plus hour angle). The resulting daylight share drives two separate clock rates, and the clock walks segment by segment so an update that crosses sunset uses the correct rate on each side. A full cycle always takes exactly `customDayLengthMinutes`, whatever the season.
+
+At `latitude=50.0` and a 60 minute day:
+
+| Month | Daylight share | Day / night in real minutes |
+| --- | --- | --- |
+| January | 34.6% | 20.8 / 39.2 |
+| March | 48.1% | 28.8 / 31.2 |
+| June | 67.1% | 40.3 / 19.7 |
+| September | 51.6% | 30.9 / 29.1 |
+| December | 32.8% | 19.7 / 40.3 |
+
+Southern latitudes are mirrored automatically: at `latitude=-50.0`, June is winter.
+
+`seasonalDaylightMinPercent` and `seasonalDaylightMaxPercent` clamp the share. Above the polar circles the raw model returns a midnight sun or a polar night, which would stall one half of the cycle entirely; the clamp keeps both halves finite while preserving the seasonal shape everywhere else. Set `seasonalDaylight=false` for an even split all year.
+
+`/realtimesync status` reports the current season, latitude, daylight share and the real minutes of day and night.
+
+### Tick cost and sun smoothness
+
+Two adjustments keep the write rate proportional to what is actually visible:
+
+- `maxTicksPerUpdate` (default `40`) caps how far the world clock may move between writes. A short compressed day moves many ticks per second, so the effective update interval is lowered automatically to keep the sun stepping in small increments. At the default one hour day the cap is not reached and `updateInterval` is used unchanged.
+- `idleUpdateInterval` (default `100`) relaxes the interval while no players are online. The clock is driven by elapsed real time, so writing less often costs no accuracy.
+
+Perceived smoothness has a hard ceiling that is not set by this mod: with the daylight gamerule disabled, the client only updates its own clock when the server broadcasts a time packet, which vanilla does roughly once per second per dimension. At a one hour day that is about 6.7 ticks, or 0.1 degrees of sun arc, per step. Very short cycles are where `maxTicksPerUpdate` starts to matter. Making the sun smoother than the vanilla broadcast cadence would require the mod to send its own time packets, which is not implemented.
 
 ### Absolute day-time behavior
 

@@ -183,6 +183,17 @@ def validate_sleep_policy() -> None:
         require(math, member, math_path)
     forbid(math, "net.minecraft", math_path)
 
+    solar_path = "common/src/main/java/com/realtime/common/RealtimeSolar.java"
+    solar = read(solar_path)
+    require(solar, "public static double daylightFraction(", solar_path)
+    require(solar, "public static double clampedDaylightFraction(", solar_path)
+    forbid(solar, "net.minecraft", solar_path)
+
+    controller_path = "common/src/main/java/com/realtime/common/RealtimeController.java"
+    controller = read(controller_path)
+    require(controller, "effectiveUpdateInterval(server)", controller_path)
+    require(controller, "currentDaylightFraction()", controller_path)
+
 
 def validate_profile_adapters() -> None:
     legacy_path = "common/src/mc121legacy/java/com/realtime/common/ProfileDaylightRuleAccess.java"

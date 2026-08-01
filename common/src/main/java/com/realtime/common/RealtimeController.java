@@ -59,6 +59,8 @@ public final class RealtimeController {
     private boolean configStatWarningShown;
     private boolean shutdownRestoreDone;
     private boolean sleepWindowTracking;
+    private int cachedDaylightDayOfYear = -1;
+    private double cachedDaylightFraction = RealtimeSolar.UNIFORM_DAYLIGHT_FRACTION;
     private long preSleepReferenceAbsolute;
     private int lastActiveDimensionCount;
     private Instant lastSuccessfulUpdate;
@@ -175,7 +177,7 @@ public final class RealtimeController {
         }
 
         tickCounter++;
-        if (tickCounter < config.updateInterval) {
+        if (tickCounter < effectiveUpdateInterval(server)) {
             performanceSkippedUpdates++;
             maybeLogPerformance();
             return;
@@ -183,6 +185,31 @@ public final class RealtimeController {
         tickCounter = 0;
         syncServerTime(server);
         maybeLogPerformance();
+    }
+
+    /**
+     * Update interval actually used this tick.
+     *
+     * <p>Two adjustments to the configured value. A short compressed day moves many ticks per
+     * second, so the interval is capped to {@code maxTicksPerUpdate} world ticks to keep the
+     * sun moving in small steps. With nobody online there is nothing to see, so the interval
+     * relaxes to {@code idleUpdateInterval}; the clock is driven by elapsed real time and does
+     * not lose accuracy from writing less often.</p>
+     */
+    private int effectiveUpdateInterval(MinecraftServer server) {
+        int interval = config.updateInterval;
+        if (config.customDayLengthMinutes > 0) {
+            double worldTicksPerServerTick =
+                    AbsoluteDayTime.TICKS_PER_DAY / (config.customDayLengthMinutes * 60.0D * 20.0D);
+            if (worldTicksPerServerTick > 0.0D) {
+                int capped = (int) Math.floor(config.maxTicksPerUpdate / worldTicksPerServerTick);
+                interval = Math.min(interval, Math.max(1, capped));
+            }
+        }
+        if (server.getPlayerList().getPlayers().isEmpty()) {
+            interval = Math.max(interval, config.idleUpdateInterval);
+        }
+        return Math.max(1, interval);
     }
 
     private void syncServerTime(MinecraftServer server) {
@@ -329,6 +356,22 @@ public final class RealtimeController {
         }
     }
 
+    /**
+     * Seasonal daylight share for today, cached for the current calendar day so the solar
+     * geometry is evaluated once per real day rather than on every update.
+     */
+    private double currentDaylightFraction() {
+        if (!config.seasonalDaylight) {
+            return RealtimeSolar.UNIFORM_DAYLIGHT_FRACTION;
+        }
+        int dayOfYear = timeMath.currentDayOfYear(config.resolvedZoneId(), config.timeOffsetMinutes);
+        if (dayOfYear != cachedDaylightDayOfYear) {
+            cachedDaylightDayOfYear = dayOfYear;
+            cachedDaylightFraction = config.daylightFraction(dayOfYear);
+        }
+        return cachedDaylightFraction;
+    }
+
     /** Real time of day shifted by an active post-sleep realignment offset. */
     private long currentRealtimeTimeOfDay() {
         return timeMath.applySleepOffset(
@@ -398,7 +441,11 @@ public final class RealtimeController {
     private long calculateCustomTarget(MinecraftServer server) {
         initializeCustomClockIfNeeded(server);
         long current = RealtimeWorldTime.readOverworldTime(server);
-        return timeMath.calculateCustomAbsoluteTicks(current, config.customDayLengthMinutes, config.maximumOfflineCatchUpSeconds);
+        return timeMath.calculateCustomAbsoluteTicks(
+                current,
+                config.customDayLengthMinutes,
+                config.maximumOfflineCatchUpSeconds,
+                currentDaylightFraction());
     }
 
     private void initializeCustomClockIfNeeded(MinecraftServer server) {
@@ -595,6 +642,7 @@ public final class RealtimeController {
         }
 
         tickCounter = Math.min(tickCounter, Math.max(0, config.updateInterval - 1));
+        cachedDaylightDayOfYear = -1;
         daylightRuleGuardTickCounter = DAYLIGHT_RULE_GUARD_INTERVAL_TICKS;
         lastProcessedServerTick = RealtimeServerState.UNKNOWN_TICK;
         smoothStates.clear();
@@ -645,6 +693,18 @@ public final class RealtimeController {
         lines.add("dimensions=" + activeDimensions);
         lines.add("daylightRulePolicy=" + config.daylightRulePolicy
                 + ", gamerule=" + (reference == null ? "no-managed-dimension" : gameRules.describeState(reference)));
+        if (config.customDayLengthMinutes > 0) {
+            double fraction = currentDaylightFraction();
+            double daylightSeconds = RealtimeSolar.daylightSeconds(config.customDayLengthMinutes, fraction);
+            lines.add("dayLengthMinutes=" + config.customDayLengthMinutes
+                    + ", seasonalDaylight=" + config.seasonalDaylight
+                    + ", season=" + RealtimeSolar.seasonName(
+                            timeMath.currentMonth(config.resolvedZoneId(), config.timeOffsetMinutes), config.latitude)
+                    + ", latitude=" + config.latitude
+                    + ", daylightShare=" + String.format(Locale.ROOT, "%.1f%%", fraction * 100.0D)
+                    + ", daylightMinutes=" + String.format(Locale.ROOT, "%.1f", daylightSeconds / 60.0D)
+                    + ", nightMinutes=" + String.format(Locale.ROOT, "%.1f", config.customDayLengthMinutes - daylightSeconds / 60.0D));
+        }
         lines.add("sleepPolicy=" + config.effectiveSleepPolicy()
                 + ", sleepOffsetTicks=" + timeMath.sleepOffsetTicks()
                 + ", realignRemainingSeconds=" + timeMath.sleepRealignRemainingSeconds()

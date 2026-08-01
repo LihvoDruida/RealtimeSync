@@ -18,6 +18,7 @@ public final class RealtimeMath {
     private static final double NANOS_PER_SECOND = 1_000_000_000.0D;
     /** Minecraft ticks the real clock advances per real second (24000 ticks per 24 hours). */
     private static final double REAL_TICKS_PER_SECOND = TICKS_PER_DAY / 86_400.0D;
+    private static final int MAX_CUSTOM_CLOCK_SEGMENTS = 64;
 
     private final Clock clock;
     private final LongSupplier nanoTime;
@@ -91,15 +92,26 @@ public final class RealtimeMath {
     public long calculateCustomAbsoluteTicks(
             long currentAbsolute,
             int customDayLengthMinutes,
-            int maximumCatchUpSeconds
+            int maximumCatchUpSeconds,
+            double daylightFraction
     ) {
-        return calculateCustomAbsoluteTicks(currentAbsolute, customDayLengthMinutes, maximumCatchUpSeconds, nanoTime.getAsLong());
+        return calculateCustomAbsoluteTicks(currentAbsolute, customDayLengthMinutes, maximumCatchUpSeconds,
+                daylightFraction, nanoTime.getAsLong());
     }
 
+    /**
+     * Advances the custom clock.
+     *
+     * <p>{@code daylightFraction} is the share of the compressed day that should be daylight.
+     * Minecraft fixes sunrise and sunset to tick values, so seasons are produced by spending
+     * a different amount of real time on ticks 0 to {@link RealtimeSolar#DAYLIGHT_END_TICK}
+     * than on the rest of the cycle. A fraction of {@code 0.5} yields a uniform clock.</p>
+     */
     long calculateCustomAbsoluteTicks(
             long currentAbsolute,
             int customDayLengthMinutes,
             int maximumCatchUpSeconds,
+            double daylightFraction,
             long nowNanos
     ) {
         if (customDayLengthMinutes <= 0) {
@@ -120,12 +132,67 @@ public final class RealtimeMath {
             elapsedSeconds = Math.min(elapsedSeconds, maximumCatchUpSeconds);
         }
 
-        double ticksPerSecond = TICKS_PER_DAY / (customDayLengthMinutes * 60.0D);
-        customAbsoluteTicks += elapsedSeconds * ticksPerSecond;
+        advanceCustomClock(elapsedSeconds, customDayLengthMinutes, daylightFraction);
         if (!Double.isFinite(customAbsoluteTicks) || customAbsoluteTicks > Long.MAX_VALUE || customAbsoluteTicks < Long.MIN_VALUE) {
             customAbsoluteTicks = currentAbsolute;
         }
         return (long) Math.floor(customAbsoluteTicks);
+    }
+
+    /**
+     * Adds {@code elapsedSeconds} of real time to the custom clock, walking segment by segment
+     * so an update that spans sunset or sunrise uses the correct rate on each side.
+     */
+    private void advanceCustomClock(double elapsedSeconds, int customDayLengthMinutes, double daylightFraction) {
+        double daySeconds = customDayLengthMinutes * 60.0D;
+        double fraction = sanitizeDaylightFraction(daylightFraction);
+        double daylightRate = RealtimeSolar.DAYLIGHT_END_TICK / (daySeconds * fraction);
+        double nightRate = (TICKS_PER_DAY - RealtimeSolar.DAYLIGHT_END_TICK) / (daySeconds * (1.0D - fraction));
+        if (!Double.isFinite(daylightRate) || !Double.isFinite(nightRate) || daylightRate <= 0.0D || nightRate <= 0.0D) {
+            customAbsoluteTicks += elapsedSeconds * (TICKS_PER_DAY / daySeconds);
+            return;
+        }
+
+        double remainingSeconds = elapsedSeconds;
+        // Each iteration consumes at least one half of the cycle, so the bound only matters
+        // for very large catch-up windows.
+        for (int segment = 0; segment < MAX_CUSTOM_CLOCK_SEGMENTS && remainingSeconds > 0.0D; segment++) {
+            double timeOfDay = customAbsoluteTicks - Math.floor(customAbsoluteTicks / TICKS_PER_DAY) * TICKS_PER_DAY;
+            boolean daylight = timeOfDay < RealtimeSolar.DAYLIGHT_END_TICK;
+            double rate = daylight ? daylightRate : nightRate;
+            double boundary = daylight ? RealtimeSolar.DAYLIGHT_END_TICK : TICKS_PER_DAY;
+            double ticksToBoundary = boundary - timeOfDay;
+            double secondsToBoundary = ticksToBoundary / rate;
+
+            if (secondsToBoundary > remainingSeconds) {
+                customAbsoluteTicks += remainingSeconds * rate;
+                return;
+            }
+            customAbsoluteTicks += ticksToBoundary;
+            remainingSeconds -= secondsToBoundary;
+        }
+
+        if (remainingSeconds > 0.0D) {
+            // Catch-up far longer than the segment bound: finish at the average rate.
+            customAbsoluteTicks += remainingSeconds * (TICKS_PER_DAY / daySeconds);
+        }
+    }
+
+    private static double sanitizeDaylightFraction(double daylightFraction) {
+        if (!Double.isFinite(daylightFraction)) {
+            return RealtimeSolar.UNIFORM_DAYLIGHT_FRACTION;
+        }
+        return Math.max(0.01D, Math.min(0.99D, daylightFraction));
+    }
+
+    /** Day of the year for the configured zone, used to derive the seasonal daylight share. */
+    public int currentDayOfYear(ZoneId zoneId, int offsetMinutes) {
+        return currentDateTime(zoneId, offsetMinutes).getDayOfYear();
+    }
+
+    /** Calendar month for the configured zone, used to name the current season. */
+    public int currentMonth(ZoneId zoneId, int offsetMinutes) {
+        return currentDateTime(zoneId, offsetMinutes).getMonthValue();
     }
 
     public long calculateSmoothAbsoluteTicks(
