@@ -35,6 +35,13 @@ public final class RealtimeConfig {
     public static final String LARGE_JUMP_SNAP = "SNAP";
     public static final String LARGE_JUMP_PAUSE_AND_WARN = "PAUSE_AND_WARN";
 
+    /** Sleeping never changes the clock; the world stays pinned to real time. */
+    public static final String SLEEP_POLICY_REALTIME_ONLY = "REALTIME_ONLY";
+    /** Vanilla performs the skip and the next update pulls the clock straight back to real time. */
+    public static final String SLEEP_POLICY_VANILLA = "VANILLA";
+    /** Vanilla performs the skip, the mod adopts it and realigns forward over a configured window. */
+    public static final String SLEEP_POLICY_REALIGN = "REALIGN";
+
     public static final String CUSTOM_RESTART_CONTINUE_FROM_WORLD = "CONTINUE_FROM_WORLD";
     public static final String CUSTOM_RESTART_RESET_TO_CONFIGURED_TIME = "RESET_TO_CONFIGURED_TIME";
     public static final String CUSTOM_RESTART_PERSIST_REAL_ELAPSED = "PERSIST_REAL_ELAPSED";
@@ -47,6 +54,8 @@ public final class RealtimeConfig {
     private static final int MAX_SNAP_THRESHOLD_TICKS = 12000;
     private static final int MAX_CATCHUP_DIVISOR = 24000;
     private static final int MAX_OFFLINE_CATCHUP_SECONDS = 60 * 60 * 24;
+    private static final int MIN_SLEEP_REALIGN_MINUTES = 1;
+    private static final int MAX_SLEEP_REALIGN_MINUTES = 60 * 48;
 
     private static final Map<String, String> TIME_ZONE_ALIASES = Map.of(
             "Europe/Kiev", "Europe/Kyiv"
@@ -58,7 +67,8 @@ public final class RealtimeConfig {
             "zoneId", "timeOffsetMinutes", "offsetHours", "realDateAnchor",
             "smoothMaxCorrectionTicksPerSecond", "maxSmoothStepTicks", "smoothSnapThresholdTicks",
             "smoothCatchupDivisor", "smoothLargeJumpPolicy", "maximumOfflineCatchUpSeconds",
-            "respectSleep", "overrideSleepTime", "updateInterval", "customDayLengthMinutes",
+            "respectSleep", "overrideSleepTime", "sleepPolicy", "sleepRealignMinutes",
+            "updateInterval", "customDayLengthMinutes",
             "minutesPerMinecraftDay", "customClockRestartPolicy", "debugLogging",
             "debugPerformanceLogging"
     );
@@ -80,6 +90,8 @@ public final class RealtimeConfig {
     public int maximumOfflineCatchUpSeconds = 300;
     public boolean respectSleep = true;
     public boolean overrideSleepTime = false;
+    public String sleepPolicy = SLEEP_POLICY_REALIGN;
+    public int sleepRealignMinutes = 360;
     public int updateInterval = 20;
     public int customDayLengthMinutes = 0;
     public String customClockRestartPolicy = CUSTOM_RESTART_CONTINUE_FROM_WORLD;
@@ -199,6 +211,8 @@ public final class RealtimeConfig {
         config.smoothCatchupDivisor = readInt(properties, "smoothCatchupDivisor", config.smoothCatchupDivisor, logger);
         config.smoothLargeJumpPolicy = readString(properties, "smoothLargeJumpPolicy", config.smoothLargeJumpPolicy);
         config.maximumOfflineCatchUpSeconds = readInt(properties, "maximumOfflineCatchUpSeconds", config.maximumOfflineCatchUpSeconds, logger);
+        config.sleepPolicy = readString(properties, "sleepPolicy", config.sleepPolicy);
+        config.sleepRealignMinutes = readInt(properties, "sleepRealignMinutes", config.sleepRealignMinutes, logger);
         config.respectSleep = readBoolean(properties, "respectSleep", config.respectSleep, logger);
         config.overrideSleepTime = readBoolean(properties, "overrideSleepTime", config.overrideSleepTime, logger);
         config.updateInterval = readInt(properties, "updateInterval", config.updateInterval, logger);
@@ -249,6 +263,17 @@ public final class RealtimeConfig {
         }
     }
 
+    /**
+     * Resolves the sleep behaviour actually in force. The legacy {@code respectSleep} and
+     * {@code overrideSleepTime} switches keep working and win over {@code sleepPolicy}.
+     */
+    public String effectiveSleepPolicy() {
+        if (!respectSleep || overrideSleepTime) {
+            return SLEEP_POLICY_REALTIME_ONLY;
+        }
+        return sleepPolicy;
+    }
+
     public boolean isSmoothSyncMode() {
         return SYNC_MODE_SMOOTH.equals(syncMode);
     }
@@ -277,11 +302,13 @@ public final class RealtimeConfig {
         smoothSnapThresholdTicks = clampWithWarning("smoothSnapThresholdTicks", smoothSnapThresholdTicks, 0, MAX_SNAP_THRESHOLD_TICKS, logger);
         smoothCatchupDivisor = clampWithWarning("smoothCatchupDivisor", smoothCatchupDivisor, 1, MAX_CATCHUP_DIVISOR, logger);
         maximumOfflineCatchUpSeconds = clampWithWarning("maximumOfflineCatchUpSeconds", maximumOfflineCatchUpSeconds, 1, MAX_OFFLINE_CATCHUP_SECONDS, logger);
+        sleepRealignMinutes = clampWithWarning("sleepRealignMinutes", sleepRealignMinutes, MIN_SLEEP_REALIGN_MINUTES, MAX_SLEEP_REALIGN_MINUTES, logger);
 
         syncMode = normalizeEnum("syncMode", syncMode, Set.of(SYNC_MODE_INSTANT, SYNC_MODE_SMOOTH), SYNC_MODE_SMOOTH, false, logger);
         daylightRulePolicy = normalizeEnum("daylightRulePolicy", daylightRulePolicy, Set.of(DAYLIGHT_POLICY_MANAGED, DAYLIGHT_POLICY_REQUIRE_OFF, DAYLIGHT_POLICY_IGNORE), DAYLIGHT_POLICY_MANAGED, true, logger);
         dayProgressionPolicy = normalizeEnum("dayProgressionPolicy", dayProgressionPolicy, Set.of(DAY_PROGRESSION_PRESERVE_MONOTONIC, DAY_PROGRESSION_PRESERVE_CURRENT_DAY, DAY_PROGRESSION_REAL_DATE_ANCHOR), DAY_PROGRESSION_PRESERVE_MONOTONIC, true, logger);
         smoothLargeJumpPolicy = normalizeEnum("smoothLargeJumpPolicy", smoothLargeJumpPolicy, Set.of(LARGE_JUMP_GRADUAL, LARGE_JUMP_SNAP, LARGE_JUMP_PAUSE_AND_WARN), LARGE_JUMP_GRADUAL, true, logger);
+        sleepPolicy = normalizeEnum("sleepPolicy", sleepPolicy, Set.of(SLEEP_POLICY_REALTIME_ONLY, SLEEP_POLICY_VANILLA, SLEEP_POLICY_REALIGN), SLEEP_POLICY_REALIGN, true, logger);
         customClockRestartPolicy = normalizeEnum("customClockRestartPolicy", customClockRestartPolicy, Set.of(CUSTOM_RESTART_CONTINUE_FROM_WORLD, CUSTOM_RESTART_RESET_TO_CONFIGURED_TIME, CUSTOM_RESTART_PERSIST_REAL_ELAPSED), CUSTOM_RESTART_CONTINUE_FROM_WORLD, true, logger);
 
         try {
@@ -308,7 +335,18 @@ public final class RealtimeConfig {
         ignoredDimensions = String.join(",", ignoredDimensionSet);
 
         if (overrideSleepTime && respectSleep) {
-            logger.warn("Both respectSleep=true and overrideSleepTime=true are set; overrideSleepTime takes precedence.");
+            logger.warn("Both respectSleep=true and overrideSleepTime=true are set; overrideSleepTime takes precedence and sleepPolicy is treated as {}.", SLEEP_POLICY_REALTIME_ONLY);
+        }
+
+        if (SLEEP_POLICY_REALIGN.equals(effectiveSleepPolicy()) && customDayLengthMinutes > 0) {
+            logger.warn("sleepPolicy={} has no effect while customDayLengthMinutes={} drives the clock; sleep skips are ignored in custom-day-length mode.",
+                    SLEEP_POLICY_REALIGN, customDayLengthMinutes);
+        }
+
+        if (SLEEP_POLICY_REALIGN.equals(effectiveSleepPolicy())
+                && DAY_PROGRESSION_REAL_DATE_ANCHOR.equals(dayProgressionPolicy)) {
+            logger.warn("sleepPolicy={} shifts only the time of day. dayProgressionPolicy={} pins the day index to the real calendar, so the Minecraft day may roll over while the sleep offset is active.",
+                    SLEEP_POLICY_REALIGN, DAY_PROGRESSION_REAL_DATE_ANCHOR);
         }
 
         if (syncAllWorlds && !syncDimensionSet.isEmpty()) {
@@ -340,6 +378,8 @@ public final class RealtimeConfig {
                 + "customClockRestartPolicy=" + customClockRestartPolicy + "\n"
                 + "respectSleep=" + respectSleep + "\n"
                 + "overrideSleepTime=" + overrideSleepTime + "\n"
+                + "sleepPolicy=" + sleepPolicy + "\n"
+                + "sleepRealignMinutes=" + sleepRealignMinutes + "\n"
                 + "debugLogging=" + debugLogging + "\n"
                 + "debugPerformanceLogging=" + debugPerformanceLogging + "\n";
     }

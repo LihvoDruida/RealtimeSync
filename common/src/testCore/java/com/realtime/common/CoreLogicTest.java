@@ -24,6 +24,8 @@ public final class CoreLogicTest {
         testDimensionIdentifiers();
         testDimensionFiltering();
         testLargeJumpPauseDetection();
+        testSleepRealign();
+        testSleepPolicyResolution();
         System.out.println("Core logic tests passed.");
     }
 
@@ -146,6 +148,52 @@ public final class CoreLogicTest {
         RealtimeConfig gradual = new RealtimeConfig();
         gradual.smoothLargeJumpPolicy = RealtimeConfig.LARGE_JUMP_GRADUAL;
         assertTrue(!math.isPausedLargeJump(0L, 30_000L, gradual), "GRADUAL never reports a pause");
+    }
+
+    private static void testSleepRealign() {
+        AtomicLong nanos = new AtomicLong(1_000_000_000L);
+        RealtimeMath math = new RealtimeMath(Clock.fixed(Instant.EPOCH, ZoneOffset.UTC), nanos::get);
+
+        // Real clock at 01:00 maps to tick 19000. A vanilla sleep skip lands on 06:00, tick 0.
+        long realTimeOfDay = RealtimeMath.timeOfDayFromLocalTime(LocalTime.of(1, 0));
+        assertEquals(19_000L, realTimeOfDay, "01:00 maps to tick 19000");
+
+        math.beginSleepRealign(0L, realTimeOfDay, 60, nanos.get());
+        assertEquals(5_000L, math.sleepOffsetTicks(), "offset adopts the skipped morning");
+        assertEquals(0L, math.applySleepOffset(realTimeOfDay), "target matches the post-sleep world time");
+        assertTrue(math.isRealigningAfterSleep(), "realignment window is active");
+        assertTrue(math.sleepRealignSpeedMultiplier() > 1.0D, "world clock runs faster than real time");
+
+        nanos.addAndGet(1_800_000_000_000L);
+        math.advanceSleepOffset(nanos.get(), 3_600);
+        assertTrue(math.sleepOffsetTicks() > 5_000L, "offset only ever grows, so the sun never moves backwards");
+        assertTrue(math.isRealigningAfterSleep(), "window still active halfway through");
+
+        nanos.addAndGet(1_800_000_000_000L);
+        math.advanceSleepOffset(nanos.get(), 3_600);
+        assertEquals(0L, math.sleepOffsetTicks(), "offset laps a full day and clears");
+        assertTrue(!math.isRealigningAfterSleep(), "realignment finished");
+        assertEquals(realTimeOfDay, math.applySleepOffset(realTimeOfDay), "world is back on real time");
+
+        // A skip that lands exactly on the real time of day needs no realignment at all.
+        math.beginSleepRealign(realTimeOfDay, realTimeOfDay, 60, nanos.get());
+        assertTrue(!math.isRealigningAfterSleep(), "no offset means no realignment window");
+    }
+
+    private static void testSleepPolicyResolution() throws Exception {
+        assertEquals(RealtimeConfig.SLEEP_POLICY_REALIGN, new RealtimeConfig().sleepPolicy, "REALIGN is the default policy");
+        assertEquals(RealtimeConfig.SLEEP_POLICY_REALIGN, sleepPolicyFor("sleepPolicy=realign\n"), "lower-case policy is normalized");
+        assertEquals(RealtimeConfig.SLEEP_POLICY_VANILLA, sleepPolicyFor("sleepPolicy=VANILLA\n"), "VANILLA policy is accepted");
+        assertEquals(RealtimeConfig.SLEEP_POLICY_REALIGN, sleepPolicyFor("sleepPolicy=nonsense\n"), "invalid policy falls back to REALIGN");
+        assertEquals(RealtimeConfig.SLEEP_POLICY_REALTIME_ONLY, sleepPolicyFor("respectSleep=false\n"), "legacy respectSleep=false still wins");
+        assertEquals(RealtimeConfig.SLEEP_POLICY_REALTIME_ONLY, sleepPolicyFor("overrideSleepTime=true\n"), "legacy overrideSleepTime=true still wins");
+    }
+
+    private static String sleepPolicyFor(String contents) throws Exception {
+        Path directory = Files.createTempDirectory("realtime-sleep-policy-test");
+        Path config = directory.resolve("realtime.properties");
+        Files.writeString(config, contents, StandardCharsets.UTF_8);
+        return RealtimeConfig.loadOrCreate(config, null, new TestLog()).effectiveSleepPolicy();
     }
 
     private static RealtimeConfig configForAnchorTest() throws Exception {

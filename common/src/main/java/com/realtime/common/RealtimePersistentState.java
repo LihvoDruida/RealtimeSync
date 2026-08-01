@@ -27,14 +27,37 @@ final class RealtimePersistentState {
             if (!Double.isFinite(ticks)) {
                 throw new NumberFormatException("customAbsoluteTicks is not finite");
             }
-            return new Snapshot(ticks, Instant.ofEpochMilli(savedEpochMillis));
+            // Sleep realignment keys are optional so state files written by older builds still load.
+            double sleepOffsetTicks = readOptionalDouble(properties, "sleepOffsetTicks");
+            double sleepRealignRatePerSecond = readOptionalDouble(properties, "sleepRealignRatePerSecond");
+            return new Snapshot(ticks, Instant.ofEpochMilli(savedEpochMillis), sleepOffsetTicks, sleepRealignRatePerSecond);
         } catch (IOException | RuntimeException exception) {
             logger.warn("Ignoring invalid RealtimeSync persistent state. {}", exception.getMessage());
             return null;
         }
     }
 
-    static void save(Path path, double customAbsoluteTicks, Instant savedAt, RealtimeLog logger) {
+    private static double readOptionalDouble(Properties properties, String key) {
+        String raw = properties.getProperty(key);
+        if (raw == null) {
+            return 0.0D;
+        }
+        try {
+            double value = Double.parseDouble(raw.trim());
+            return Double.isFinite(value) ? value : 0.0D;
+        } catch (NumberFormatException exception) {
+            return 0.0D;
+        }
+    }
+
+    static void save(
+            Path path,
+            double customAbsoluteTicks,
+            Instant savedAt,
+            double sleepOffsetTicks,
+            double sleepRealignRatePerSecond,
+            RealtimeLog logger
+    ) {
         Path temporary = path.resolveSibling(path.getFileName() + ".tmp");
         try {
             Path parent = path.getParent();
@@ -43,7 +66,9 @@ final class RealtimePersistentState {
             }
             String content = "# Internal RealtimeSync state; do not edit while the server is running.\n"
                     + "customAbsoluteTicks=" + customAbsoluteTicks + "\n"
-                    + "savedEpochMillis=" + savedAt.toEpochMilli() + "\n";
+                    + "savedEpochMillis=" + savedAt.toEpochMilli() + "\n"
+                    + "sleepOffsetTicks=" + sleepOffsetTicks + "\n"
+                    + "sleepRealignRatePerSecond=" + sleepRealignRatePerSecond + "\n";
             Files.writeString(temporary, content, StandardCharsets.UTF_8);
             try {
                 Files.move(temporary, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
@@ -60,6 +85,11 @@ final class RealtimePersistentState {
         }
     }
 
-    record Snapshot(double customAbsoluteTicks, Instant savedAt) {
+    record Snapshot(
+            double customAbsoluteTicks,
+            Instant savedAt,
+            double sleepOffsetTicks,
+            double sleepRealignRatePerSecond
+    ) {
     }
 }

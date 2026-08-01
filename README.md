@@ -85,6 +85,8 @@ customDayLengthMinutes=0
 customClockRestartPolicy=CONTINUE_FROM_WORLD
 respectSleep=true
 overrideSleepTime=false
+sleepPolicy=REALIGN
+sleepRealignMinutes=360
 debugLogging=false
 debugPerformanceLogging=false
 ```
@@ -112,11 +114,35 @@ debugPerformanceLogging=false
 | `customDayLengthMinutes` | `0` | `0` uses the real clock. Positive values define a custom day duration using monotonic elapsed time. |
 | `customClockRestartPolicy` | `CONTINUE_FROM_WORLD` | `CONTINUE_FROM_WORLD`, `RESET_TO_CONFIGURED_TIME`, or `PERSIST_REAL_ELAPSED`. |
 | `respectSleep` | `true` | Temporarily releases the managed daylight rule and pauses mod writes **in the dimension where a player is sleeping**, allowing vanilla sleep progression. Other managed dimensions keep synchronizing. |
-| `overrideSleepTime` | `false` | Keeps synchronization active during sleep. |
+| `overrideSleepTime` | `false` | Keeps synchronization active during sleep. Equivalent to `sleepPolicy=REALTIME_ONLY`. |
+| `sleepPolicy` | `REALIGN` | `REALIGN` accepts the vanilla sleep skip and then runs the world clock fast until it meets real time again. `VANILLA` lets the next update pull the clock straight back to real time. `REALTIME_ONLY` never lets sleeping change the clock. |
+| `sleepRealignMinutes` | `360` | Real minutes a `REALIGN` window takes to return the world to real time. Lower values mean a faster, more noticeable world clock. |
 | `debugLogging` | `false` | Enables detailed functional logs. |
 | `debugPerformanceLogging` | `false` | Emits aggregated 60-second performance summaries rather than per-tick spam. |
 
 Legacy keys `forceDaylightCycleOff`, `offsetHours`, `maxSmoothStepTicks`, and `minutesPerMinecraftDay` are read for compatibility and rewritten once to the canonical UTF-8 format after a successful migration. The legacy timezone alias `Europe/Kiev` is rewritten as `Europe/Kyiv`. A legacy `realtime.toml` is parsed only for supported flat keys, backed up as `realtime.toml.bak`, and converted atomically to UTF-8 `realtime.properties`.
+
+### Sleeping and real time
+
+Real-time synchronization and vanilla sleep want opposite things. Vanilla sleep sets the world to the next morning; a real-time clock says the time is whatever it is outside. Without a policy the mod simply undoes the skip, which players report as "sleeping does nothing".
+
+`sleepPolicy` decides which side wins:
+
+| Value | Behavior | Use when |
+| --- | --- | --- |
+| `REALIGN` (default) | Vanilla performs the skip. The mod adopts the resulting morning as a temporary offset from real time, then closes the gap by running the world clock **faster** than real time for `sleepRealignMinutes`. | Sleeping should feel normal and the world should still end up on real time. |
+| `VANILLA` | Vanilla performs the skip and the next synchronization pass pulls the clock back to real time. | The pre-existing behavior is wanted. |
+| `REALTIME_ONLY` | Sleeping never changes the clock. Players still wake up, reset their spawn point and clear phantom timers. | The world must never leave real time. |
+
+Realignment only ever moves the clock **forward**. Closing the gap by rewinding would run the sun backwards, so the offset is instead grown until it laps a full Minecraft day and reaches zero again. In practice: sleep at 01:00 real time skips to 06:00 in game, the world is then about five real hours ahead, the following in-game day runs at roughly 4x speed for six real hours, and the clock is back on real time afterwards.
+
+Consequences worth knowing:
+
+- The first in-game day after sleeping is shorter in real minutes than a normal synchronized day. `sleepRealignMinutes` controls exactly how much shorter.
+- `/realtimesync status` reports `sleepPolicy`, the current offset, the remaining realignment time and the current clock speed multiplier.
+- An active realignment window survives a restart. It is stored in `config/realtime-state.properties` and resumed with the elapsed downtime applied, capped by `maximumOfflineCatchUpSeconds`.
+- `REALIGN` is ignored while `customDayLengthMinutes` drives the clock, and it shifts only the time of day, so `dayProgressionPolicy=REAL_DATE_ANCHOR` may roll the Minecraft day over while an offset is active. Both cases are reported as configuration warnings.
+- The legacy `respectSleep=false` and `overrideSleepTime=true` switches still work and both resolve to `REALTIME_ONLY`.
 
 ### Absolute day-time behavior
 

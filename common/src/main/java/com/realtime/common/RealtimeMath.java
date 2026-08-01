@@ -16,12 +16,23 @@ public final class RealtimeMath {
     private static final long NANOS_PER_DAY = 86_400_000_000_000L;
     private static final long MINECRAFT_MIDNIGHT_TICK = 18_000L;
     private static final double NANOS_PER_SECOND = 1_000_000_000.0D;
+    /** Minecraft ticks the real clock advances per real second (24000 ticks per 24 hours). */
+    private static final double REAL_TICKS_PER_SECOND = TICKS_PER_DAY / 86_400.0D;
 
     private final Clock clock;
     private final LongSupplier nanoTime;
 
     private double customAbsoluteTicks;
     private long lastCustomUpdateNanos = Long.MIN_VALUE;
+
+    /**
+     * Ticks the world clock currently runs ahead of the real clock after a vanilla sleep skip.
+     * Always in [0, TICKS_PER_DAY). Realignment increases the offset until it laps a full day
+     * and becomes zero again, so the world clock only ever moves forward.
+     */
+    private double sleepOffsetTicks;
+    private double sleepRealignRatePerSecond;
+    private long lastSleepOffsetNanos = Long.MIN_VALUE;
 
     public RealtimeMath() {
         this(Clock.systemUTC(), System::nanoTime);
@@ -188,6 +199,105 @@ public final class RealtimeMath {
     public void resetCustomClock() {
         lastCustomUpdateNanos = Long.MIN_VALUE;
         customAbsoluteTicks = 0.0D;
+    }
+
+    /**
+     * Accepts the world time produced by a vanilla sleep skip and schedules a monotonic
+     * realignment back to real time.
+     *
+     * <p>Closing the gap by moving the world clock backwards would rewind the sun, so the
+     * offset is instead grown forward until it wraps a whole Minecraft day. The world clock
+     * therefore runs faster than real time for {@code realignMinutes} and then continues at
+     * exactly real-time speed.</p>
+     */
+    public void beginSleepRealign(long worldTimeOfDay, long realTimeOfDay, int realignMinutes, long nowNanos) {
+        long offset = Math.floorMod(worldTimeOfDay - realTimeOfDay, TICKS_PER_DAY);
+        if (offset == 0L) {
+            resetSleepRealign();
+            return;
+        }
+        sleepOffsetTicks = offset;
+        double seconds = Math.max(1.0D, realignMinutes * 60.0D);
+        sleepRealignRatePerSecond = (TICKS_PER_DAY - offset) / seconds;
+        lastSleepOffsetNanos = nowNanos;
+    }
+
+    /** Restores a realignment window that was interrupted by a server restart. */
+    public void restoreSleepRealign(double offsetTicks, double ratePerSecond, long nowNanos) {
+        if (!Double.isFinite(offsetTicks) || !Double.isFinite(ratePerSecond)
+                || offsetTicks <= 0.0D || offsetTicks >= TICKS_PER_DAY || ratePerSecond <= 0.0D) {
+            resetSleepRealign();
+            return;
+        }
+        sleepOffsetTicks = offsetTicks;
+        sleepRealignRatePerSecond = ratePerSecond;
+        lastSleepOffsetNanos = nowNanos;
+    }
+
+    /** Advances the realignment. Ends the window once a full day has been recovered. */
+    public void advanceSleepOffset(long nowNanos, int maximumCatchUpSeconds) {
+        if (sleepRealignRatePerSecond <= 0.0D) {
+            return;
+        }
+        if (lastSleepOffsetNanos == Long.MIN_VALUE) {
+            lastSleepOffsetNanos = nowNanos;
+            return;
+        }
+        double elapsedSeconds = nonNegativeElapsed(lastSleepOffsetNanos, nowNanos) / NANOS_PER_SECOND;
+        if (maximumCatchUpSeconds >= 0) {
+            elapsedSeconds = Math.min(elapsedSeconds, maximumCatchUpSeconds);
+        }
+        lastSleepOffsetNanos = nowNanos;
+        sleepOffsetTicks += sleepRealignRatePerSecond * elapsedSeconds;
+        if (!Double.isFinite(sleepOffsetTicks) || sleepOffsetTicks >= TICKS_PER_DAY) {
+            resetSleepRealign();
+        }
+    }
+
+    /** Shifts a real time-of-day value by the active sleep offset. */
+    public long applySleepOffset(long realTimeOfDay) {
+        if (sleepOffsetTicks <= 0.0D) {
+            return Math.floorMod(realTimeOfDay, TICKS_PER_DAY);
+        }
+        return Math.floorMod(realTimeOfDay + (long) Math.floor(sleepOffsetTicks), TICKS_PER_DAY);
+    }
+
+    public long sleepOffsetTicks() {
+        return (long) Math.floor(sleepOffsetTicks);
+    }
+
+    public double sleepOffsetTicksExact() {
+        return sleepOffsetTicks;
+    }
+
+    public double sleepRealignRatePerSecond() {
+        return sleepRealignRatePerSecond;
+    }
+
+    public boolean isRealigningAfterSleep() {
+        return sleepRealignRatePerSecond > 0.0D;
+    }
+
+    /** Remaining realignment time in seconds, or {@code 0} when no window is active. */
+    public long sleepRealignRemainingSeconds() {
+        if (sleepRealignRatePerSecond <= 0.0D) {
+            return 0L;
+        }
+        return (long) Math.ceil((TICKS_PER_DAY - sleepOffsetTicks) / sleepRealignRatePerSecond);
+    }
+
+    /** Multiplier the world clock currently runs at compared to real time. */
+    public double sleepRealignSpeedMultiplier() {
+        if (sleepRealignRatePerSecond <= 0.0D) {
+            return 1.0D;
+        }
+        return 1.0D + sleepRealignRatePerSecond / REAL_TICKS_PER_SECOND;
+    }
+
+    public void resetSleepRealign() {
+        sleepOffsetTicks = 0.0D;
+        sleepRealignRatePerSecond = 0.0D;
+        lastSleepOffsetNanos = Long.MIN_VALUE;
     }
 
     public void resetRealtimeAnchor() {

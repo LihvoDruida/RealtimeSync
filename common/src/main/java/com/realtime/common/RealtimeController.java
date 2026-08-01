@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.zip.CRC32;
@@ -25,6 +26,11 @@ public final class RealtimeController {
     private static final int DAYLIGHT_RULE_GUARD_INTERVAL_TICKS = 20 * 60;
     private static final long PERFORMANCE_LOG_INTERVAL_NANOS = 60_000_000_000L;
     private static final String OVERWORLD_DIMENSION_ID = "minecraft:overworld";
+    /**
+     * Minimum forward jump treated as a vanilla sleep skip. A sleep window lasts about 100
+     * ticks of normal vanilla progression, so anything beyond this can only be the skip.
+     */
+    private static final long SLEEP_SKIP_DETECTION_TICKS = 600L;
 
     private final RealtimeLog logger;
     private final Path configPath;
@@ -52,6 +58,8 @@ public final class RealtimeController {
     private boolean noManagedDimensionsWarningShown;
     private boolean configStatWarningShown;
     private boolean shutdownRestoreDone;
+    private boolean sleepWindowTracking;
+    private long preSleepReferenceAbsolute;
     private int lastActiveDimensionCount;
     private Instant lastSuccessfulUpdate;
     private Instant lastConfigReload;
@@ -88,6 +96,7 @@ public final class RealtimeController {
         resetRuntimeState(false);
         RealtimeWorldTime.resetRuntimeState();
         reloadConfig(true);
+        restoreSleepRealignIfNeeded();
         initializeCustomClockIfNeeded(server);
         manageDaylightRules(server, true);
         syncServerTime(server);
@@ -116,7 +125,7 @@ public final class RealtimeController {
         if (activeServer != server) {
             return;
         }
-        persistCustomClockIfNeeded();
+        persistRuntimeState();
         gameRules.restoreAll(server);
         shutdownRestoreDone = true;
     }
@@ -127,7 +136,7 @@ public final class RealtimeController {
         }
         if (!shutdownRestoreDone) {
             // Loader entrypoint without a stopping hook, or an abrupt shutdown path.
-            persistCustomClockIfNeeded();
+            persistRuntimeState();
             gameRules.restoreAll(server);
         }
         activeServer = null;
@@ -192,6 +201,10 @@ public final class RealtimeController {
                     }
                     gameRules.beginSleepWindow(server);
                 }
+                if (!sleepWindowTracking) {
+                    sleepWindowTracking = true;
+                    preSleepReferenceAbsolute = RealtimeWorldTime.readOverworldTime(server);
+                }
                 rulesSuspendedForSleep = true;
                 sleepSkipLogged = logSleepState(sleepingDimensions, sleepSkipLogged);
                 // Only the sleeping dimensions are skipped below; other managed dimensions
@@ -199,12 +212,19 @@ public final class RealtimeController {
             } else if (rulesSuspendedForSleep) {
                 gameRules.endSleepWindow(server);
                 rulesSuspendedForSleep = false;
+                handleSleepWindowClosed(server);
                 manageDaylightRules(server, true);
             }
 
             boolean customMode = config.customDayLengthMinutes > 0;
             long commonCustomTarget = customMode ? calculateCustomTarget(server) : 0L;
-            long realtimeTimeOfDay = customMode ? 0L : timeMath.calculateRealtimeTimeOfDay(config.resolvedZoneId(), config.timeOffsetMinutes);
+            long updateNanos = timeMath.nowNanos();
+            boolean wasRealigning = timeMath.isRealigningAfterSleep();
+            timeMath.advanceSleepOffset(updateNanos, config.maximumOfflineCatchUpSeconds);
+            if (wasRealigning && !timeMath.isRealigningAfterSleep()) {
+                logger.info("RealtimeSync finished realigning after a sleep skip; the world clock is back on real time.");
+            }
+            long realtimeTimeOfDay = customMode ? 0L : currentRealtimeTimeOfDay();
             // REAL_DATE_ANCHOR does not depend on the current world time, so the ZonedDateTime
             // and calendar difference are computed once per update instead of once per dimension.
             boolean sharedRealtimeTarget = !customMode
@@ -212,7 +232,6 @@ public final class RealtimeController {
             long commonRealtimeTarget = sharedRealtimeTarget
                     ? timeMath.resolveRealtimeAbsoluteTarget(0L, realtimeTimeOfDay, config)
                     : 0L;
-            long updateNanos = timeMath.nowNanos();
             int managedWorlds = 0;
             int syncedWorlds = 0;
             long lastTargetAbsolute = 0L;
@@ -310,6 +329,72 @@ public final class RealtimeController {
         }
     }
 
+    /** Real time of day shifted by an active post-sleep realignment offset. */
+    private long currentRealtimeTimeOfDay() {
+        return timeMath.applySleepOffset(
+                timeMath.calculateRealtimeTimeOfDay(config.resolvedZoneId(), config.timeOffsetMinutes));
+    }
+
+    /**
+     * Decides what to do with the world time vanilla produced while players were sleeping.
+     *
+     * <p>{@code VANILLA} lets the next update pull the clock straight back to real time.
+     * {@code REALIGN} adopts the skip and hands it to {@link RealtimeMath#beginSleepRealign}
+     * so the world clock runs fast until it meets real time again, without ever going
+     * backwards.</p>
+     */
+    private void handleSleepWindowClosed(MinecraftServer server) {
+        boolean tracked = sleepWindowTracking;
+        long before = preSleepReferenceAbsolute;
+        sleepWindowTracking = false;
+        if (!tracked
+                || config.customDayLengthMinutes > 0
+                || !RealtimeConfig.SLEEP_POLICY_REALIGN.equals(config.effectiveSleepPolicy())) {
+            return;
+        }
+
+        long after = RealtimeWorldTime.readOverworldTime(server);
+        if (after - before < SLEEP_SKIP_DETECTION_TICKS) {
+            // Players left the bed without triggering a vanilla skip.
+            return;
+        }
+
+        long realTimeOfDay = timeMath.calculateRealtimeTimeOfDay(config.resolvedZoneId(), config.timeOffsetMinutes);
+        timeMath.beginSleepRealign(
+                AbsoluteDayTime.timeOfDay(after),
+                realTimeOfDay,
+                config.sleepRealignMinutes,
+                timeMath.nowNanos());
+        persistRuntimeState();
+        logger.info("RealtimeSync accepted a vanilla sleep skip: the world is {} tick(s) ahead of real time and will run at about {}x speed for the next {} minute(s).",
+                timeMath.sleepOffsetTicks(),
+                String.format(Locale.ROOT, "%.2f", timeMath.sleepRealignSpeedMultiplier()),
+                config.sleepRealignMinutes);
+    }
+
+    /** Restores a realignment window that was interrupted by a restart. */
+    private void restoreSleepRealignIfNeeded() {
+        if (config.customDayLengthMinutes > 0
+                || !RealtimeConfig.SLEEP_POLICY_REALIGN.equals(config.effectiveSleepPolicy())) {
+            return;
+        }
+        RealtimePersistentState.Snapshot snapshot = RealtimePersistentState.load(statePath, logger);
+        if (snapshot == null || snapshot.sleepRealignRatePerSecond() <= 0.0D) {
+            return;
+        }
+        long elapsedSeconds = Math.max(0L, Duration.between(snapshot.savedAt(), timeMath.now()).getSeconds());
+        elapsedSeconds = Math.min(elapsedSeconds, config.maximumOfflineCatchUpSeconds);
+        double offset = snapshot.sleepOffsetTicks() + snapshot.sleepRealignRatePerSecond() * elapsedSeconds;
+        if (offset >= AbsoluteDayTime.TICKS_PER_DAY) {
+            timeMath.resetSleepRealign();
+            return;
+        }
+        timeMath.restoreSleepRealign(offset, snapshot.sleepRealignRatePerSecond(), timeMath.nowNanos());
+        logger.info("RealtimeSync resumed a sleep realignment window: offset={} tick(s), remaining={} second(s).",
+                timeMath.sleepOffsetTicks(),
+                timeMath.sleepRealignRemainingSeconds());
+    }
+
     private long calculateCustomTarget(MinecraftServer server) {
         initializeCustomClockIfNeeded(server);
         long current = RealtimeWorldTime.readOverworldTime(server);
@@ -339,16 +424,24 @@ public final class RealtimeController {
         customClockInitialized = true;
     }
 
-    private void persistCustomClockIfNeeded() {
-        if (customClockInitialized
+    private void persistRuntimeState() {
+        boolean customClockNeedsPersistence = customClockInitialized
                 && config.customDayLengthMinutes > 0
-                && RealtimeConfig.CUSTOM_RESTART_PERSIST_REAL_ELAPSED.equals(config.customClockRestartPolicy)) {
-            RealtimePersistentState.save(statePath, timeMath.customClockValue(), timeMath.now(), logger);
+                && RealtimeConfig.CUSTOM_RESTART_PERSIST_REAL_ELAPSED.equals(config.customClockRestartPolicy);
+        if (!customClockNeedsPersistence && !timeMath.isRealigningAfterSleep()) {
+            return;
         }
+        RealtimePersistentState.save(
+                statePath,
+                timeMath.customClockValue(),
+                timeMath.now(),
+                timeMath.sleepOffsetTicksExact(),
+                timeMath.sleepRealignRatePerSecond(),
+                logger);
     }
 
     private Set<String> sleepingDimensionIds(MinecraftServer server) {
-        if (!config.respectSleep || config.overrideSleepTime) {
+        if (RealtimeConfig.SLEEP_POLICY_REALTIME_ONLY.equals(config.effectiveSleepPolicy())) {
             return Set.of();
         }
         // Nobody sleeps during the vast majority of updates, so the set is allocated lazily.
@@ -487,9 +580,13 @@ public final class RealtimeController {
         }
         if (previous.customDayLengthMinutes != config.customDayLengthMinutes
                 || !previous.customClockRestartPolicy.equals(config.customClockRestartPolicy)) {
-            persistCustomClockIfNeeded();
+            persistRuntimeState();
             customClockInitialized = false;
             timeMath.resetCustomClock();
+        }
+        if (!previous.effectiveSleepPolicy().equals(config.effectiveSleepPolicy())
+                && !RealtimeConfig.SLEEP_POLICY_REALIGN.equals(config.effectiveSleepPolicy())) {
+            timeMath.resetSleepRealign();
         }
         if (!previous.dayProgressionPolicy.equals(config.dayProgressionPolicy)
                 || !previous.zoneId.equals(config.zoneId)
@@ -529,8 +626,7 @@ public final class RealtimeController {
         if (config.customDayLengthMinutes > 0) {
             targetAbsolute = customClockInitialized ? (long) Math.floor(timeMath.customClockValue()) : currentAbsolute;
         } else {
-            long targetTimeOfDay = timeMath.calculateRealtimeTimeOfDay(config.resolvedZoneId(), config.timeOffsetMinutes);
-            targetAbsolute = timeMath.resolveRealtimeAbsoluteTarget(currentAbsolute, targetTimeOfDay, config);
+            targetAbsolute = timeMath.resolveRealtimeAbsoluteTarget(currentAbsolute, currentRealtimeTimeOfDay(), config);
         }
 
         RealtimeBuildInfo buildInfo = RealtimeBuildInfo.current();
@@ -549,6 +645,10 @@ public final class RealtimeController {
         lines.add("dimensions=" + activeDimensions);
         lines.add("daylightRulePolicy=" + config.daylightRulePolicy
                 + ", gamerule=" + (reference == null ? "no-managed-dimension" : gameRules.describeState(reference)));
+        lines.add("sleepPolicy=" + config.effectiveSleepPolicy()
+                + ", sleepOffsetTicks=" + timeMath.sleepOffsetTicks()
+                + ", realignRemainingSeconds=" + timeMath.sleepRealignRemainingSeconds()
+                + ", clockSpeed=" + String.format(Locale.ROOT, "%.2fx", timeMath.sleepRealignSpeedMultiplier()));
         lines.add("gameruleAdapter=" + gameRules.adapterName()
                 + ", dimensionAdapter=" + RealtimeWorldTime.dimensionAdapterName()
                 + ", commandPermissionAdapter=" + RealtimeStatusCommand.permissionAdapterName());
@@ -582,8 +682,7 @@ public final class RealtimeController {
         if (config.customDayLengthMinutes > 0) {
             targetAbsolute = customClockInitialized ? (long) Math.floor(timeMath.customClockValue()) : currentAbsolute;
         } else {
-            long targetTimeOfDay = timeMath.calculateRealtimeTimeOfDay(config.resolvedZoneId(), config.timeOffsetMinutes);
-            targetAbsolute = timeMath.resolveRealtimeAbsoluteTarget(currentAbsolute, targetTimeOfDay, config);
+            targetAbsolute = timeMath.resolveRealtimeAbsoluteTarget(currentAbsolute, currentRealtimeTimeOfDay(), config);
         }
         logger.info("RealtimeSync initial state: managedDimensions={}, currentAbsoluteDayTime={}, targetAbsoluteDayTime={}, gamerule={}.",
                 managedDimensions,
@@ -603,6 +702,8 @@ public final class RealtimeController {
         sleepSkipLogged = false;
         rulesSuspendedForSleep = false;
         shutdownRestoreDone = false;
+        sleepWindowTracking = false;
+        preSleepReferenceAbsolute = 0L;
         lastProcessedServerTick = RealtimeServerState.UNKNOWN_TICK;
         customClockInitialized = false;
         noManagedDimensionsWarningShown = false;
@@ -614,6 +715,7 @@ public final class RealtimeController {
         }
         timeMath.resetCustomClock();
         timeMath.resetRealtimeAnchor();
+        timeMath.resetSleepRealign();
         smoothStates.clear();
         lastSmoothUpdateNanos.clear();
         unresolvedDimensionWarnings.clear();

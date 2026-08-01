@@ -144,6 +144,8 @@ def validate_common() -> None:
     require(java, "gameRules.restoreAll(server)", path)
     require(java, "markServerTick(server)", path)
     require(java, "pruneDimensionState(", path)
+    require(java, "handleSleepWindowClosed(server)", path)
+    require(java, "restoreSleepRealignIfNeeded()", path)
     require(java, "statFingerprint(configPath)", path)
     forbid(java, "net.fabricmc", path)
     forbid(java, "net.minecraftforge", path)
@@ -163,6 +165,23 @@ def validate_hot_path() -> None:
         java = read(path)
         require(java, "RealtimeIdentifiers.normalize(", path)
         forbid(java, ".matches(\"[a-z0-9_.-]+:", path)
+
+
+def validate_sleep_policy() -> None:
+    """The sleep policy must stay loader-independent and keep the legacy switches working."""
+    config_path = "common/src/main/java/com/realtime/common/RealtimeConfig.java"
+    config = read(config_path)
+    for constant in ("SLEEP_POLICY_REALTIME_ONLY", "SLEEP_POLICY_VANILLA", "SLEEP_POLICY_REALIGN"):
+        require(config, constant, config_path)
+    require(config, "public String effectiveSleepPolicy()", config_path)
+    require(config, "sleepPolicy=", config_path)
+    require(config, "sleepRealignMinutes=", config_path)
+
+    math_path = "common/src/main/java/com/realtime/common/RealtimeMath.java"
+    math = read(math_path)
+    for member in ("beginSleepRealign(", "advanceSleepOffset(", "applySleepOffset(", "restoreSleepRealign("):
+        require(math, member, math_path)
+    forbid(math, "net.minecraft", math_path)
 
 
 def validate_profile_adapters() -> None:
@@ -201,6 +220,7 @@ def main() -> int:
     parse_args()
     validate_common()
     validate_hot_path()
+    validate_sleep_policy()
     validate_profile_adapters()
     validate_fabric_like()
     validate_forge()
