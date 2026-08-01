@@ -8,6 +8,7 @@ import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStoppedEvent;
+import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.loading.FMLPaths;
 import org.apache.logging.log4j.LogManager;
@@ -29,6 +30,8 @@ public final class RealtimeForge {
         RegisterCommandsEvent.BUS.addListener(this::onRegisterCommands);
         ServerStartedEvent.BUS.addListener(this::onServerStarted);
         TickEvent.ServerTickEvent.Post.BUS.addListener(this::onServerTick);
+        // ServerStoppingEvent runs before the worlds are saved, so restored gamerule values persist.
+        ServerStoppingEvent.BUS.addListener(this::onServerStopping);
         ServerStoppedEvent.BUS.addListener(this::onServerStopped);
 
         LOGGER.info("{} loaded for Forge record events. Config: {}", RealtimeConstants.MOD_NAME, controller.configPath().getFileName());
@@ -44,6 +47,10 @@ public final class RealtimeForge {
 
     private void onServerTick(TickEvent.ServerTickEvent.Post event) {
         controller.onServerTick(event.server());
+    }
+
+    private void onServerStopping(ServerStoppingEvent event) {
+        controller.onServerStopping(event.getServer());
     }
 
     private void onServerStopped(ServerStoppedEvent event) {

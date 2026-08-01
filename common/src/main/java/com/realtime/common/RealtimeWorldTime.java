@@ -3,17 +3,28 @@ package com.realtime.common;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 
-import java.util.Locale;
+import java.util.IdentityHashMap;
+import java.util.Map;
 
 /** Safe Minecraft 1.21.x access to absolute world day-time and dimension identifiers. */
 public final class RealtimeWorldTime {
     private static final DimensionIdAccess DIMENSION_ACCESS = new ProfileDimensionIdAccess();
+    private static final String OVERWORLD_DIMENSION_ID = "minecraft:overworld";
+    private static final String UNRESOLVED = "";
+    private static final int MAX_CACHED_DIMENSIONS = 256;
+
+    /**
+     * Resolving a dimension identifier allocates a ResourceLocation string and validates it.
+     * The result never changes for a given level instance, so it is cached by identity and
+     * cleared on every server lifecycle transition.
+     */
+    private static final Map<ServerLevel, String> DIMENSION_ID_CACHE = new IdentityHashMap<>();
 
     private RealtimeWorldTime() {
     }
 
     public static void resetRuntimeState() {
-        // Profile adapters are stateless. Kept as a lifecycle hook for future adapters.
+        DIMENSION_ID_CACHE.clear();
     }
 
     public static String dimensionAdapterName() {
@@ -26,8 +37,7 @@ public final class RealtimeWorldTime {
             if (fallback == null) {
                 fallback = level;
             }
-            String dimensionId = dimensionId(level);
-            if ("minecraft:overworld".equals(dimensionId)) {
+            if (OVERWORLD_DIMENSION_ID.equals(dimensionId(level))) {
                 return readDayTime(level);
             }
         }
@@ -60,19 +70,28 @@ public final class RealtimeWorldTime {
 
     /** Returns a validated namespaced dimension identifier, or {@code null} when unavailable. */
     public static String dimensionId(ServerLevel level) {
-        try {
-            return normalizeIdentifier(DIMENSION_ACCESS.dimensionId(level));
-        } catch (RuntimeException exception) {
-            return null;
+        String cached = DIMENSION_ID_CACHE.get(level);
+        if (cached != null) {
+            return cached.isEmpty() ? null : cached;
         }
+
+        String resolved;
+        try {
+            resolved = RealtimeIdentifiers.normalize(DIMENSION_ACCESS.dimensionId(level));
+        } catch (RuntimeException exception) {
+            resolved = null;
+        }
+
+        if (DIMENSION_ID_CACHE.size() >= MAX_CACHED_DIMENSIONS) {
+            // Defensive bound for servers that create and discard dimensions at runtime.
+            DIMENSION_ID_CACHE.clear();
+        }
+        DIMENSION_ID_CACHE.put(level, resolved == null ? UNRESOLVED : resolved);
+        return resolved;
     }
 
     static String normalizeIdentifier(String raw) {
-        if (raw == null) {
-            return null;
-        }
-        String value = raw.trim().toLowerCase(Locale.ROOT);
-        return value.matches("[a-z0-9_.-]+:[a-z0-9_./-]+") ? value : null;
+        return RealtimeIdentifiers.normalize(raw);
     }
 
     private static String safeDimensionLabel(ServerLevel level) {

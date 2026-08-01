@@ -10,6 +10,7 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
+import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -30,6 +31,8 @@ public final class RealtimeNeoForge {
         NeoForge.EVENT_BUS.addListener(this::onRegisterCommands);
         NeoForge.EVENT_BUS.addListener(this::onServerStarted);
         NeoForge.EVENT_BUS.addListener(this::onServerTick);
+        // ServerStoppingEvent runs before the worlds are saved, so restored gamerule values persist.
+        NeoForge.EVENT_BUS.addListener(this::onServerStopping);
         NeoForge.EVENT_BUS.addListener(this::onServerStopped);
 
         LOGGER.info("{} loaded for NeoForge. Config: {}", RealtimeConstants.MOD_NAME, controller.configPath().getFileName());
@@ -45,6 +48,10 @@ public final class RealtimeNeoForge {
 
     private void onServerTick(ServerTickEvent.Post event) {
         controller.onServerTick(event.getServer());
+    }
+
+    private void onServerStopping(ServerStoppingEvent event) {
+        controller.onServerStopping(event.getServer());
     }
 
     private void onServerStopped(ServerStoppedEvent event) {

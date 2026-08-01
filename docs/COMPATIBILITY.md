@@ -25,7 +25,7 @@ The build profile, not runtime guessing, selects the GameRules implementation.
 
 ## Loader lifecycle
 
-- Fabric/Quilt-compatible: `SERVER_STARTED`, `END_SERVER_TICK`, `SERVER_STOPPED`.
+- Fabric/Quilt-compatible: `SERVER_STARTED`, `END_SERVER_TICK`, `SERVER_STOPPING`, `SERVER_STOPPED`.
 - Forge 1.21–1.21.5: legacy global Forge event bus.
 - Forge 1.21.6–1.21.8: EventBus 7 event-local `BUS` fields with class-style tick accessors.
 - Forge 1.21.9–1.21.11: EventBus 7 event-local `BUS` fields with record-style `ServerTickEvent.Post.server()`.

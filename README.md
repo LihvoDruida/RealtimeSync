@@ -99,7 +99,7 @@ debugPerformanceLogging=false
 | `zoneId` | `system` | IANA timezone such as `Europe/Kyiv`, or `system` to use the host timezone. |
 | `timeOffsetMinutes` | `0` | Additional real-clock offset in minutes. |
 | `realDateAnchor` | `1970-01-01` | Calendar anchor used only by `REAL_DATE_ANCHOR`. |
-| `syncAllWorlds` | `false` | Synchronizes every resolvable loaded dimension only when the allowlist is empty. |
+| `syncAllWorlds` | `false` | Synchronizes every resolvable loaded dimension only when the allowlist is empty. Setting it to `true` while `syncDimensions` is non-empty has no effect and is reported as a startup warning. |
 | `syncDimensions` | `minecraft:overworld` | Comma-separated ResourceLocation allowlist. Unknown identifiers are skipped rather than treated as the Overworld. |
 | `ignoredDimensions` | empty | Comma-separated denylist; it always wins over the allowlist. |
 | `syncMode` | `smooth` | `instant` writes the absolute target directly. `smooth` corrects drift using real elapsed monotonic time instead of assuming 20 TPS. |
@@ -111,7 +111,7 @@ debugPerformanceLogging=false
 | `maximumOfflineCatchUpSeconds` | `300` | Caps elapsed time consumed after JVM pauses or server downtime. |
 | `customDayLengthMinutes` | `0` | `0` uses the real clock. Positive values define a custom day duration using monotonic elapsed time. |
 | `customClockRestartPolicy` | `CONTINUE_FROM_WORLD` | `CONTINUE_FROM_WORLD`, `RESET_TO_CONFIGURED_TIME`, or `PERSIST_REAL_ELAPSED`. |
-| `respectSleep` | `true` | Temporarily releases the managed daylight rule and pauses mod writes while a player sleeps, allowing vanilla sleep progression. |
+| `respectSleep` | `true` | Temporarily releases the managed daylight rule and pauses mod writes **in the dimension where a player is sleeping**, allowing vanilla sleep progression. Other managed dimensions keep synchronizing. |
 | `overrideSleepTime` | `false` | Keeps synchronization active during sleep. |
 | `debugLogging` | `false` | Enables detailed functional logs. |
 | `debugPerformanceLogging` | `false` | Emits aggregated 60-second performance summaries rather than per-tick spam. |
@@ -123,6 +123,15 @@ Legacy keys `forceDaylightCycleOff`, `offsetHours`, `maxSmoothStepTicks`, and `m
 RealtimeSync writes only `ServerLevel.setDayTime(long)`. It never writes `gameTime`, never truncates the value to `0..23999`, and never executes Minecraft 26.x `time of` commands. This preserves the world day counter, moon phase, scheduled ticks, and unrelated server timers.
 
 In the vanilla coordinate system, `dayTime=0` corresponds to 06:00. Therefore `REAL_DATE_ANCHOR` keeps a continuous absolute timeline across real midnight and rolls the Minecraft day index when the mapped time crosses tick `0`.
+
+### Vanilla dimension scope
+
+Vanilla shares one `GameRules` instance and one `dayTime` counter across all built-in dimensions: non-Overworld levels use `DerivedLevelData`, whose `setDayTime` is a no-op and whose `getGameRules` delegates to the primary level data. Two consequences:
+
+- Disabling the daylight rule for the Overworld disables it for the Nether and the End as well. This is vanilla behavior and cannot be scoped per dimension.
+- Adding `minecraft:the_nether` or `minecraft:the_end` to `syncDimensions` has no measurable effect, because writes to those levels do not change any stored value.
+
+Per-dimension synchronization is therefore meaningful only for modded dimensions that carry their own level data.
 
 ### Dimension filtering
 
@@ -148,7 +157,8 @@ Startup diagnostics include the embedded mod version, Minecraft profile, loader,
 
 Loader entrypoints are deliberately thin:
 
-- Fabric/Quilt-compatible builds use `SERVER_STARTED`, `END_SERVER_TICK`, and `SERVER_STOPPED` lifecycle events.
+- Fabric/Quilt-compatible builds use `SERVER_STARTED`, `END_SERVER_TICK`, `SERVER_STOPPING`, and `SERVER_STOPPED` lifecycle events.
+- Gamerule ownership is released in the *stopping* phase (`SERVER_STOPPING` / `ServerStoppingEvent`) on every loader. `SERVER_STOPPED` runs after the levels have been saved and closed, so a restore performed there would never reach `level.dat`.
 - Forge uses a build-profile-selected lifecycle entrypoint for the EventBus 6, EventBus 7 class-event, or EventBus 7 record-event API boundary; there is no 50 ms background scheduler.
 - NeoForge uses one `ServerTickEvent.Post` per server tick, not one level event per dimension.
 - `RealtimeController` owns cadence, sleep suspension, config reload, persistence, and dimension iteration.
@@ -429,4 +439,4 @@ Use `python3 scripts/validate-dependency-artifacts.py --online` when you need to
 
 ### Fabric/Quilt lifecycle compatibility
 
-Fabric and the Quilt-compatible artifact use explicit `SERVER_STARTED`, `END_SERVER_TICK`, and `SERVER_STOPPED` events. Startup initializes the selected profile adapter and managed gamerule state; shutdown restores only values still owned by the mod and clears runtime caches.
+Fabric and the Quilt-compatible artifact use explicit `SERVER_STARTED`, `END_SERVER_TICK`, `SERVER_STOPPING`, and `SERVER_STOPPED` events. Startup initializes the selected profile adapter and managed gamerule state. Shutdown restores only values still owned by the mod, and it does so during `SERVER_STOPPING` so the restored gamerule is still written to disk; `SERVER_STOPPED` only clears runtime caches.

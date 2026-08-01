@@ -19,6 +19,7 @@ OUT="$(mktemp -d)"
 trap 'rm -rf "${OUT}"' EXIT
 javac -encoding UTF-8 -d "${OUT}" \
   common/src/main/java/com/realtime/common/AbsoluteDayTime.java \
+  common/src/main/java/com/realtime/common/RealtimeIdentifiers.java \
   common/src/main/java/com/realtime/common/RealtimeMath.java \
   common/src/main/java/com/realtime/common/RealtimeConfig.java \
   common/src/main/java/com/realtime/common/RealtimePersistentState.java \

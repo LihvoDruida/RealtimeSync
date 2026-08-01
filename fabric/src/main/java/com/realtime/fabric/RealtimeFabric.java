@@ -28,6 +28,8 @@ public final class RealtimeFabric implements ModInitializer {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> controller.registerCommands(dispatcher));
         ServerLifecycleEvents.SERVER_STARTED.register(controller::onServerStarted);
         ServerTickEvents.END_SERVER_TICK.register(controller::onServerTick);
+        // SERVER_STOPPING runs before the worlds are saved, so restored gamerule values persist.
+        ServerLifecycleEvents.SERVER_STOPPING.register(controller::onServerStopping);
         ServerLifecycleEvents.SERVER_STOPPED.register(controller::onServerStopped);
 
         LOGGER.info("{} loaded for Fabric-compatible environments. Config: {}",

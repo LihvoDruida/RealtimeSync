@@ -21,6 +21,9 @@ public final class CoreLogicTest {
         testSmoothElapsedTime();
         testCustomClock();
         testUtf8ConfigAndLegacyMigration();
+        testDimensionIdentifiers();
+        testDimensionFiltering();
+        testLargeJumpPauseDetection();
         System.out.println("Core logic tests passed.");
     }
 
@@ -101,6 +104,49 @@ public final class CoreLogicTest {
         assertEquals(2L, AbsoluteDayTime.dayIndex(49_200L), "custom clock preserves day count");
     }
 
+
+    private static void testDimensionIdentifiers() {
+        assertEquals("minecraft:overworld", RealtimeIdentifiers.normalize("minecraft:overworld"), "plain identifier");
+        assertEquals("minecraft:overworld", RealtimeIdentifiers.normalize("  Minecraft:OverWorld  "), "trim and lower-case");
+        assertEquals("example:deep/moon", RealtimeIdentifiers.normalize("example:deep/moon"), "path separators allowed");
+        assertTrue(RealtimeIdentifiers.normalize(null) == null, "null identifier");
+        assertTrue(RealtimeIdentifiers.normalize("") == null, "empty identifier");
+        assertTrue(RealtimeIdentifiers.normalize("   ") == null, "blank identifier");
+        assertTrue(RealtimeIdentifiers.normalize("overworld") == null, "missing namespace");
+        assertTrue(RealtimeIdentifiers.normalize("mine craft:overworld") == null, "space inside identifier");
+        assertTrue(RealtimeIdentifiers.normalize("майнкрафт:світ") == null, "non-ascii identifier");
+    }
+
+    private static void testDimensionFiltering() throws Exception {
+        Path directory = Files.createTempDirectory("realtime-dimension-test");
+        Path config = directory.resolve("realtime.properties");
+        Files.writeString(config,
+                "syncAllWorlds=true\n"
+                        + "syncDimensions=Minecraft:Overworld, example:moon ,,not-an-id\n"
+                        + "ignoredDimensions=example:moon\n",
+                StandardCharsets.UTF_8);
+        RealtimeConfig loaded = RealtimeConfig.loadOrCreate(config, null, new TestLog());
+
+        assertEquals(2L, loaded.syncDimensionSet().size(), "invalid identifiers are dropped");
+        assertTrue(loaded.syncDimensionSet().contains("minecraft:overworld"), "allowlist normalized");
+        assertTrue(loaded.syncDimensionSet().contains("example:moon"), "allowlist keeps custom dimension");
+        assertTrue(!loaded.syncDimensionSet().contains("not-an-id"), "malformed identifier rejected");
+        assertTrue(loaded.ignoredDimensionSet().contains("example:moon"), "denylist normalized");
+        assertEquals("minecraft:overworld,example:moon", loaded.syncDimensions, "canonical allowlist order preserved");
+    }
+
+    private static void testLargeJumpPauseDetection() {
+        RealtimeConfig config = new RealtimeConfig();
+        config.smoothLargeJumpPolicy = RealtimeConfig.LARGE_JUMP_PAUSE_AND_WARN;
+        RealtimeMath math = new RealtimeMath(Clock.fixed(Instant.EPOCH, ZoneOffset.UTC), () -> 0L);
+
+        assertTrue(math.isPausedLargeJump(0L, 30_000L, config), "difference beyond one day pauses");
+        assertTrue(!math.isPausedLargeJump(0L, 20_000L, config), "difference within one day does not pause");
+
+        RealtimeConfig gradual = new RealtimeConfig();
+        gradual.smoothLargeJumpPolicy = RealtimeConfig.LARGE_JUMP_GRADUAL;
+        assertTrue(!math.isPausedLargeJump(0L, 30_000L, gradual), "GRADUAL never reports a pause");
+    }
 
     private static RealtimeConfig configForAnchorTest() throws Exception {
         Path directory = Files.createTempDirectory("realtime-anchor-test");

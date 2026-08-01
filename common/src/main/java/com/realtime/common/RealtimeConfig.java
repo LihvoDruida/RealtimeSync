@@ -310,6 +310,11 @@ public final class RealtimeConfig {
         if (overrideSleepTime && respectSleep) {
             logger.warn("Both respectSleep=true and overrideSleepTime=true are set; overrideSleepTime takes precedence.");
         }
+
+        if (syncAllWorlds && !syncDimensionSet.isEmpty()) {
+            logger.warn("syncAllWorlds=true is ignored because syncDimensions is not empty. Only {} will be synchronized. Clear syncDimensions to synchronize every dimension.",
+                    syncDimensions);
+        }
     }
 
     private String toFileContent() {
@@ -474,11 +479,7 @@ public final class RealtimeConfig {
     }
 
     static String normalizeDimensionIdentifier(String raw) {
-        if (raw == null) {
-            return null;
-        }
-        String value = raw.trim().toLowerCase(Locale.ROOT);
-        return value.matches("[a-z0-9_.-]+:[a-z0-9_./-]+") ? value : null;
+        return RealtimeIdentifiers.normalize(raw);
     }
 
     private static String normalizeEnum(String key, String value, Set<String> supported, String fallback, boolean uppercase, RealtimeLog logger) {

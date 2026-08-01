@@ -6,7 +6,9 @@ import net.minecraft.server.level.ServerPlayer;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -34,6 +36,8 @@ public final class RealtimeController {
     private final Map<String, Long> lastSmoothUpdateNanos = new HashMap<>();
     private final Set<String> unresolvedDimensionWarnings = new HashSet<>();
     private final Set<String> largeJumpWarnings = new HashSet<>();
+    /** Reused between updates so the hot path does not allocate a new set every time. */
+    private final Set<String> activeDimensionIds = new HashSet<>();
 
     private RealtimeConfig config;
     private ConfigFingerprint configFingerprint = ConfigFingerprint.missing();
@@ -46,6 +50,8 @@ public final class RealtimeController {
     private MinecraftServer activeServer;
     private boolean customClockInitialized;
     private boolean noManagedDimensionsWarningShown;
+    private boolean configStatWarningShown;
+    private boolean shutdownRestoreDone;
     private int lastActiveDimensionCount;
     private Instant lastSuccessfulUpdate;
     private Instant lastConfigReload;
@@ -100,12 +106,30 @@ public final class RealtimeController {
         logInitialState(server);
     }
 
-    public void onServerStopped(MinecraftServer server) {
+    /**
+     * Called while the server is still shutting down. Gamerule ownership must be released
+     * here: {@code onServerStopped} runs after every level has been saved and closed, so a
+     * restored {@code doDaylightCycle}/{@code advance_time} value written at that point would
+     * never reach {@code level.dat} and the world would stay frozen after removing the mod.
+     */
+    public void onServerStopping(MinecraftServer server) {
         if (activeServer != server) {
             return;
         }
         persistCustomClockIfNeeded();
         gameRules.restoreAll(server);
+        shutdownRestoreDone = true;
+    }
+
+    public void onServerStopped(MinecraftServer server) {
+        if (activeServer != server) {
+            return;
+        }
+        if (!shutdownRestoreDone) {
+            // Loader entrypoint without a stopping hook, or an abrupt shutdown path.
+            persistCustomClockIfNeeded();
+            gameRules.restoreAll(server);
+        }
         activeServer = null;
         resetRuntimeState(true);
         RealtimeWorldTime.resetRuntimeState();
@@ -155,6 +179,7 @@ public final class RealtimeController {
     private void syncServerTime(MinecraftServer server) {
         long startedNanos = timeMath.nowNanos();
         try {
+            activeDimensionIds.clear();
             Set<String> sleepingDimensions = sleepingDimensionIds(server);
             if (!sleepingDimensions.isEmpty()) {
                 if (RealtimeConfig.DAYLIGHT_POLICY_MANAGED.equals(config.daylightRulePolicy)) {
@@ -169,10 +194,9 @@ public final class RealtimeController {
                 }
                 rulesSuspendedForSleep = true;
                 sleepSkipLogged = logSleepState(sleepingDimensions, sleepSkipLogged);
-                performanceSkippedUpdates++;
-                return;
-            }
-            if (rulesSuspendedForSleep) {
+                // Only the sleeping dimensions are skipped below; other managed dimensions
+                // keep their synchronization instead of freezing server-wide.
+            } else if (rulesSuspendedForSleep) {
                 gameRules.endSleepWindow(server);
                 rulesSuspendedForSleep = false;
                 manageDaylightRules(server, true);
@@ -181,9 +205,17 @@ public final class RealtimeController {
             boolean customMode = config.customDayLengthMinutes > 0;
             long commonCustomTarget = customMode ? calculateCustomTarget(server) : 0L;
             long realtimeTimeOfDay = customMode ? 0L : timeMath.calculateRealtimeTimeOfDay(config.resolvedZoneId(), config.timeOffsetMinutes);
+            // REAL_DATE_ANCHOR does not depend on the current world time, so the ZonedDateTime
+            // and calendar difference are computed once per update instead of once per dimension.
+            boolean sharedRealtimeTarget = !customMode
+                    && RealtimeConfig.DAY_PROGRESSION_REAL_DATE_ANCHOR.equals(config.dayProgressionPolicy);
+            long commonRealtimeTarget = sharedRealtimeTarget
+                    ? timeMath.resolveRealtimeAbsoluteTarget(0L, realtimeTimeOfDay, config)
+                    : 0L;
             long updateNanos = timeMath.nowNanos();
             int managedWorlds = 0;
             int syncedWorlds = 0;
+            long lastTargetAbsolute = 0L;
 
             for (ServerLevel level : server.getAllLevels()) {
                 String dimensionId = resolveManagedDimensionId(level);
@@ -191,14 +223,21 @@ public final class RealtimeController {
                     continue;
                 }
                 managedWorlds++;
+                activeDimensionIds.add(dimensionId);
                 if (sleepingDimensions.contains(dimensionId)) {
                     continue;
                 }
 
                 long currentAbsolute = RealtimeWorldTime.readDayTime(level);
-                long targetAbsolute = customMode
-                        ? commonCustomTarget
-                        : timeMath.resolveRealtimeAbsoluteTarget(currentAbsolute, realtimeTimeOfDay, config);
+                long targetAbsolute;
+                if (customMode) {
+                    targetAbsolute = commonCustomTarget;
+                } else if (sharedRealtimeTarget) {
+                    targetAbsolute = commonRealtimeTarget;
+                } else {
+                    targetAbsolute = timeMath.resolveRealtimeAbsoluteTarget(currentAbsolute, realtimeTimeOfDay, config);
+                }
+                lastTargetAbsolute = targetAbsolute;
                 long appliedAbsolute = targetAbsolute;
 
                 if (!customMode && config.isSmoothSyncMode()) {
@@ -207,9 +246,12 @@ public final class RealtimeController {
                     lastSmoothUpdateNanos.put(dimensionId, updateNanos);
                     RealtimeMath.SmoothState state = smoothStates.computeIfAbsent(dimensionId, ignored -> new RealtimeMath.SmoothState());
                     appliedAbsolute = timeMath.calculateSmoothAbsoluteTicks(currentAbsolute, targetAbsolute, elapsedSeconds, config, state);
-                    if (timeMath.isPausedLargeJump(currentAbsolute, targetAbsolute, config)
-                            && largeJumpWarnings.add(dimensionId)) {
-                        logger.warn("Time synchronization for {} is paused because the target differs by more than one Minecraft day. Set smoothLargeJumpPolicy=GRADUAL or SNAP after checking the host clock.", dimensionId);
+                    if (timeMath.isPausedLargeJump(currentAbsolute, targetAbsolute, config)) {
+                        if (largeJumpWarnings.add(dimensionId)) {
+                            logger.warn("Time synchronization for {} is paused because the target differs by more than one Minecraft day. Set smoothLargeJumpPolicy=GRADUAL or SNAP after checking the host clock.", dimensionId);
+                        }
+                    } else if (largeJumpWarnings.remove(dimensionId)) {
+                        logger.info("Time synchronization for {} resumed; the target is back within one Minecraft day.", dimensionId);
                     }
                 }
 
@@ -230,10 +272,18 @@ public final class RealtimeController {
             if (syncedWorlds > 0) {
                 lastSuccessfulUpdate = timeMath.now();
             }
+            pruneDimensionState(activeDimensionIds);
             if (config.debugLogging) {
-                logger.info("RealtimeSync updated {} dimension(s); targetTimeOfDay={}, customMode={}.", syncedWorlds, realtimeTimeOfDay, customMode);
+                logger.info("RealtimeSync updated {} of {} managed dimension(s); targetAbsoluteDayTime={}, customMode={}, sleeping={}.",
+                        syncedWorlds,
+                        managedWorlds,
+                        lastTargetAbsolute,
+                        customMode,
+                        sleepingDimensions);
             }
-            sleepSkipLogged = false;
+            if (sleepingDimensions.isEmpty()) {
+                sleepSkipLogged = false;
+            }
             performanceUpdates++;
         } catch (RuntimeException exception) {
             logger.error("Failed to synchronize Minecraft dayTime.", exception);
@@ -241,6 +291,22 @@ public final class RealtimeController {
             long duration = Math.max(0L, timeMath.nowNanos() - startedNanos);
             performanceTotalNanos += duration;
             performanceMaxNanos = Math.max(performanceMaxNanos, duration);
+        }
+    }
+
+    /**
+     * Drops per-dimension runtime state for dimensions that are no longer loaded or managed.
+     * Without this, a server that unloads and recreates dimensions grows these maps forever.
+     */
+    private void pruneDimensionState(Set<String> activeDimensions) {
+        if (smoothStates.size() > activeDimensions.size()) {
+            smoothStates.keySet().retainAll(activeDimensions);
+        }
+        if (lastSmoothUpdateNanos.size() > activeDimensions.size()) {
+            lastSmoothUpdateNanos.keySet().retainAll(activeDimensions);
+        }
+        if (largeJumpWarnings.size() > activeDimensions.size()) {
+            largeJumpWarnings.retainAll(activeDimensions);
         }
     }
 
@@ -285,16 +351,22 @@ public final class RealtimeController {
         if (!config.respectSleep || config.overrideSleepTime) {
             return Set.of();
         }
-        Set<String> sleeping = new HashSet<>();
+        // Nobody sleeps during the vast majority of updates, so the set is allocated lazily.
+        Set<String> sleeping = null;
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            if (player.isSleeping() && player.level() instanceof ServerLevel level) {
-                String dimensionId = resolveManagedDimensionId(level);
-                if (dimensionId != null && shouldSyncLevel(dimensionId)) {
-                    sleeping.add(dimensionId);
-                }
+            if (!player.isSleeping() || !(player.level() instanceof ServerLevel level)) {
+                continue;
             }
+            String dimensionId = resolveManagedDimensionId(level);
+            if (dimensionId == null || !shouldSyncLevel(dimensionId)) {
+                continue;
+            }
+            if (sleeping == null) {
+                sleeping = new HashSet<>(4);
+            }
+            sleeping.add(dimensionId);
         }
-        return sleeping;
+        return sleeping == null ? Set.of() : sleeping;
     }
 
     private boolean logSleepState(Set<String> sleepingDimensions, boolean wasLogged) {
@@ -377,16 +449,29 @@ public final class RealtimeController {
     }
 
     private boolean reloadConfig(boolean force) {
-        ConfigFingerprint currentFingerprint = fingerprint(configPath);
-        if (!force && currentFingerprint.equals(configFingerprint)) {
-            return false;
+        if (!force) {
+            // Polling used to read and checksum the whole file every five seconds on the
+            // server thread. A metadata check is enough to prove nothing changed.
+            ConfigFingerprint metadata = statFingerprint(configPath);
+            if (metadata.sameMetadata(configFingerprint)) {
+                return false;
+            }
+            ConfigFingerprint content = contentFingerprint(configPath);
+            if (content.hasContentHash()
+                    && configFingerprint.hasContentHash()
+                    && content.sameContent(configFingerprint)) {
+                // The file was touched or rewritten with identical bytes; absorb the new
+                // timestamp so the next poll is a single stat call again.
+                configFingerprint = content;
+                return false;
+            }
         }
 
         RealtimeConfig previous = config;
         RealtimeConfig loaded = force
                 ? RealtimeConfig.loadOrCreate(configPath, legacyConfigPath, logger)
                 : RealtimeConfig.reload(configPath, config, logger);
-        configFingerprint = fingerprint(configPath);
+        configFingerprint = contentFingerprint(configPath);
         if (loaded == previous && !force) {
             return false;
         }
@@ -517,9 +602,11 @@ public final class RealtimeController {
         daylightRuleGuardTickCounter = 0;
         sleepSkipLogged = false;
         rulesSuspendedForSleep = false;
+        shutdownRestoreDone = false;
         lastProcessedServerTick = RealtimeServerState.UNKNOWN_TICK;
         customClockInitialized = false;
         noManagedDimensionsWarningShown = false;
+        configStatWarningShown = false;
         lastActiveDimensionCount = 0;
         lastSuccessfulUpdate = null;
         if (clearGameRuleOwnership) {
@@ -531,6 +618,7 @@ public final class RealtimeController {
         lastSmoothUpdateNanos.clear();
         unresolvedDimensionWarnings.clear();
         largeJumpWarnings.clear();
+        activeDimensionIds.clear();
         resetPerformanceWindow();
         if (clearGameRuleOwnership) {
             gameRules.clearRuntimeState();
@@ -571,24 +659,63 @@ public final class RealtimeController {
         performanceGameruleChecks = 0L;
     }
 
-    private ConfigFingerprint fingerprint(Path path) {
-        if (!Files.exists(path)) {
+    /** Metadata-only fingerprint. One stat call, no file content is read. */
+    private ConfigFingerprint statFingerprint(Path path) {
+        try {
+            BasicFileAttributes attributes = Files.readAttributes(path, BasicFileAttributes.class);
+            if (!attributes.isRegularFile()) {
+                return ConfigFingerprint.missing();
+            }
+            return new ConfigFingerprint(attributes.lastModifiedTime().toMillis(), attributes.size(), ConfigFingerprint.NO_HASH);
+        } catch (NoSuchFileException exception) {
+            return ConfigFingerprint.missing();
+        } catch (IOException exception) {
+            configStatWarningShown = warnOnce(configStatWarningShown,
+                    "Could not read RealtimeSync config metadata. {}", exception.getMessage());
             return ConfigFingerprint.missing();
         }
+    }
+
+    /** Full fingerprint including a CRC32 of the file content. Used only when metadata changed. */
+    private ConfigFingerprint contentFingerprint(Path path) {
         try {
             byte[] content = Files.readAllBytes(path);
             CRC32 crc = new CRC32();
             crc.update(content);
             return new ConfigFingerprint(Files.getLastModifiedTime(path).toMillis(), content.length, crc.getValue());
+        } catch (NoSuchFileException exception) {
+            return ConfigFingerprint.missing();
         } catch (IOException exception) {
-            logger.warn("Could not fingerprint RealtimeSync config. {}", exception.getMessage());
+            configStatWarningShown = warnOnce(configStatWarningShown,
+                    "Could not fingerprint RealtimeSync config. {}", exception.getMessage());
             return ConfigFingerprint.missing();
         }
     }
 
+    private boolean warnOnce(boolean alreadyWarned, String message, Object... args) {
+        if (!alreadyWarned) {
+            logger.warn(message, args);
+        }
+        return true;
+    }
+
     private record ConfigFingerprint(long modifiedMillis, long size, long crc32) {
+        private static final long NO_HASH = -2L;
+
         private static ConfigFingerprint missing() {
             return new ConfigFingerprint(-1L, -1L, -1L);
+        }
+
+        private boolean sameMetadata(ConfigFingerprint other) {
+            return modifiedMillis == other.modifiedMillis && size == other.size;
+        }
+
+        private boolean hasContentHash() {
+            return crc32 != NO_HASH;
+        }
+
+        private boolean sameContent(ConfigFingerprint other) {
+            return size == other.size && crc32 == other.crc32;
         }
     }
 }

@@ -35,6 +35,7 @@ def validate_fabric_like() -> None:
     require(java, "implements ModInitializer", path)
     require(java, "ServerLifecycleEvents.SERVER_STARTED.register(controller::onServerStarted)", path)
     require(java, "ServerTickEvents.END_SERVER_TICK.register(controller::onServerTick)", path)
+    require(java, "ServerLifecycleEvents.SERVER_STOPPING.register(controller::onServerStopping)", path)
     require(java, "ServerLifecycleEvents.SERVER_STOPPED.register(controller::onServerStopped)", path)
     forbid(java, "ClientTickEvents", path)
     forbid(java, "MinecraftClient", path)
@@ -53,6 +54,7 @@ def validate_forge() -> None:
     require(legacy, "MinecraftForge.EVENT_BUS.addListener(this::onRegisterCommands)", legacy_path)
     require(legacy, "MinecraftForge.EVENT_BUS.addListener(this::onServerStarted)", legacy_path)
     require(legacy, "MinecraftForge.EVENT_BUS.addListener(this::onServerTick)", legacy_path)
+    require(legacy, "MinecraftForge.EVENT_BUS.addListener(this::onServerStopping)", legacy_path)
     require(legacy, "MinecraftForge.EVENT_BUS.addListener(this::onServerStopped)", legacy_path)
     require(legacy, "controller.onServerTick(event.getServer())", legacy_path)
 
@@ -62,6 +64,7 @@ def validate_forge() -> None:
     require(eventbus7, "RegisterCommandsEvent.BUS.addListener(this::onRegisterCommands)", eventbus7_path)
     require(eventbus7, "ServerStartedEvent.BUS.addListener(this::onServerStarted)", eventbus7_path)
     require(eventbus7, "TickEvent.ServerTickEvent.Post.BUS.addListener(this::onServerTick)", eventbus7_path)
+    require(eventbus7, "ServerStoppingEvent.BUS.addListener(this::onServerStopping)", eventbus7_path)
     require(eventbus7, "ServerStoppedEvent.BUS.addListener(this::onServerStopped)", eventbus7_path)
     require(eventbus7, "controller.onServerTick(event.getServer())", eventbus7_path)
     forbid(eventbus7, "MinecraftForge.EVENT_BUS", eventbus7_path)
@@ -73,6 +76,7 @@ def validate_forge() -> None:
     require(record, "RegisterCommandsEvent.BUS.addListener(this::onRegisterCommands)", record_path)
     require(record, "ServerStartedEvent.BUS.addListener(this::onServerStarted)", record_path)
     require(record, "TickEvent.ServerTickEvent.Post.BUS.addListener(this::onServerTick)", record_path)
+    require(record, "ServerStoppingEvent.BUS.addListener(this::onServerStopping)", record_path)
     require(record, "ServerStoppedEvent.BUS.addListener(this::onServerStopped)", record_path)
     require(record, "controller.onServerTick(event.server())", record_path)
     forbid(record, "MinecraftForge.EVENT_BUS", record_path)
@@ -109,6 +113,7 @@ def validate_neoforge() -> None:
     require(java, "@Mod(RealtimeConstants.MOD_ID)", path)
     require(java, "NeoForge.EVENT_BUS.addListener(this::onServerStarted)", path)
     require(java, "NeoForge.EVENT_BUS.addListener(this::onServerTick)", path)
+    require(java, "NeoForge.EVENT_BUS.addListener(this::onServerStopping)", path)
     require(java, "NeoForge.EVENT_BUS.addListener(this::onServerStopped)", path)
     require(java, "ServerTickEvent.Post", path)
     forbid(java, "LevelTickEvent", path)
@@ -130,6 +135,7 @@ def validate_common() -> None:
     java = read(path)
     for signature in (
         "public void onServerStarted(MinecraftServer server)",
+        "public void onServerStopping(MinecraftServer server)",
         "public void onServerStopped(MinecraftServer server)",
         "public void onWorldLoad(MinecraftServer server, ServerLevel level)",
         "public void onServerTick(MinecraftServer server)",
@@ -137,9 +143,26 @@ def validate_common() -> None:
         require(java, signature, path)
     require(java, "gameRules.restoreAll(server)", path)
     require(java, "markServerTick(server)", path)
+    require(java, "pruneDimensionState(", path)
+    require(java, "statFingerprint(configPath)", path)
     forbid(java, "net.fabricmc", path)
     forbid(java, "net.minecraftforge", path)
     forbid(java, "net.neoforged", path)
+
+
+def validate_hot_path() -> None:
+    """Namespaced identifiers must not recompile a regular expression per update."""
+    shared_path = "common/src/main/java/com/realtime/common/RealtimeIdentifiers.java"
+    shared = read(shared_path)
+    require(shared, "Pattern.compile(", shared_path)
+
+    for path in (
+        "common/src/main/java/com/realtime/common/RealtimeWorldTime.java",
+        "common/src/main/java/com/realtime/common/RealtimeConfig.java",
+    ):
+        java = read(path)
+        require(java, "RealtimeIdentifiers.normalize(", path)
+        forbid(java, ".matches(\"[a-z0-9_.-]+:", path)
 
 
 def validate_profile_adapters() -> None:
@@ -177,6 +200,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     parse_args()
     validate_common()
+    validate_hot_path()
     validate_profile_adapters()
     validate_fabric_like()
     validate_forge()
